@@ -7,6 +7,12 @@ set -euo pipefail
 DABI_ROOT=/srv/dabi
 SECRET_DIR=/run/dabi/secrets
 
+echo "[*] Creating dummy users for container UIDs..."
+groupadd -g 101 dabi_clickhouse || true
+useradd -u 101 -g 101 -M -s /bin/false dabi_clickhouse || true
+groupadd -g 999 dabi_redis || true
+useradd -u 999 -g 999 -M -s /bin/false dabi_redis || true
+
 echo "[*] Creating /srv/dabi subdirs with container-expected ownership..."
 install -d -o 1000 -g 0    "$DABI_ROOT/opensearch"
 install -d -o 101  -g 101  "$DABI_ROOT/clickhouse"
@@ -35,5 +41,18 @@ mountpoint -q "$SECRET_DIR" || mount -t tmpfs -o size=1m,mode=700 tmpfs "$SECRET
 
 echo "[*] Pulling secrets from Secret Manager..."
 "$(dirname "$0")/pull-secrets.sh"
+
+echo "[*] Rendering .env with PROJECT and SHAs..."
+# Fallback to default SHAs if not provided in the environment
+API_SHA=${API_SHA:-latest}
+INGEST_SHA=${INGEST_SHA:-latest}
+PROJECT=$(gcloud config get-value project)
+
+# Render the .env file exactly as expected by docker-compose.yml
+cat > "$DABI_ROOT/deploy/.env" <<EOF
+PROJECT=${PROJECT}
+API_SHA=${API_SHA}
+INGEST_SHA=${INGEST_SHA}
+EOF
 
 echo "[*] Done. Next: docker compose pull && docker compose up -d"
