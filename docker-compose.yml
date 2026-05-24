@@ -47,6 +47,9 @@ services:
     restart: unless-stopped
     environment:
       - TZ=Etc/UTC
+      - CLICKHOUSE_MAX_MEMORY=${CLICKHOUSE_MAX_MEMORY}
+      - DABI_CH_API_PW_SHA256=${DABI_CH_API_PW_SHA256}
+      - DABI_CH_INGEST_PW_SHA256=${DABI_CH_INGEST_PW_SHA256}
     ulimits:
       memlock: { soft: -1, hard: -1 }
       nofile:  { soft: 262144, hard: 262144 }

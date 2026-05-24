@@ -1,4 +1,5 @@
-<!-- api user: readonly, password from env (sourced from /run/secrets at compose start) -->
+<!-- api user: readonly. SHA256 hash passed in as DABI_CH_API_PW_SHA256 env var
+     (bootstrap.sh appends it to .env from /run/dabi/secrets/dabi-ch-api-password-sha256). -->
 <clickhouse>
   <users>
     <api>

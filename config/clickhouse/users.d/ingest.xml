@@ -1,4 +1,5 @@
-<!-- ingest user: writer for dabi.*; no DDL -->
+<!-- ingest user: writer for dabi.*; no DDL.
+     SHA256 hash passed in as DABI_CH_INGEST_PW_SHA256 env var (bootstrap.sh sources from tmpfs secret). -->
 <clickhouse>
   <users>
     <ingest>

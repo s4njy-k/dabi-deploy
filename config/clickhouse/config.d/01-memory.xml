@@ -1,8 +1,12 @@
 <clickhouse>
   <max_server_memory_usage from_env="CLICKHOUSE_MAX_MEMORY"/>
   <max_concurrent_queries>50</max_concurrent_queries>
-  <background_pool_size>8</background_pool_size>
+  <!-- background_pool_size override removed: ClickHouse 25.8 requires it to be
+       >= ceil(number_of_free_entries_in_pool_to_execute_mutation / background_merges_mutations_concurrency_ratio).
+       Default (16) satisfies that and is fine for a c4a-standard-16. -->
   <merge_tree>
-    <max_part_size_to_merge>10737418240</max_part_size_to_merge>  <!-- 10 GiB -->
+    <!-- Cap any single merge at 10 GiB so we don't blow through disk during compaction.
+         (Renamed from max_part_size_to_merge in newer ClickHouse versions.) -->
+    <max_bytes_to_merge_at_max_space_in_pool>10737418240</max_bytes_to_merge_at_max_space_in_pool>
   </merge_tree>
 </clickhouse>
