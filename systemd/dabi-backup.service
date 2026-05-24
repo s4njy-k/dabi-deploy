@@ -1,0 +1,10 @@
+[Unit]
+Description=DABI hourly backup (OpenSearch + ClickHouse + Redis + auth.db)
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/dabi/deploy
+ExecStart=/srv/dabi/deploy/scripts/backup.sh
+Nice=15
+IOSchedulingClass=idle

@@ -1,0 +1,11 @@
+[Unit]
+Description=DABI RIR-level WHOIS + rDNS daily
+
+[Timer]
+OnCalendar=*-*-* 23:30:00 UTC   ; 05:00 IST
+Persistent=true
+RandomizedDelaySec=300
+Unit=dabi-ingest@rir.service
+
+[Install]
+WantedBy=timers.target

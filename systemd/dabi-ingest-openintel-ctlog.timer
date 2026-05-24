@@ -1,0 +1,11 @@
+[Unit]
+Description=DABI OpenINTEL CT-log forward-DNS ingest
+
+[Timer]
+OnCalendar=*-*-* 21:30:00 UTC   ; 03:00 IST
+Persistent=true
+RandomizedDelaySec=300
+Unit=dabi-ingest@openintel-ctlog.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,20 @@
+# OpenSearch 3.x single-node configuration
+# Security plugin is DISABLED via DISABLE_SECURITY_PLUGIN=true env var
+# Bind only to the internal docker network; api container is the sole client
+
+cluster.name: dabi
+node.name: dabi-single
+discovery.type: single-node
+
+network.host: 0.0.0.0
+http.port: 9200
+http.compression: true
+
+# Index defaults
+action.auto_create_index: false  # explicit index creation only
+
+# Memory
+bootstrap.memory_lock: true
+
+# CORS (api is the only client; UI never talks to OS directly)
+http.cors.enabled: false

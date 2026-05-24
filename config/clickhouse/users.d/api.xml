@@ -1,0 +1,20 @@
+<!-- api user: readonly, password from env (sourced from /run/secrets at compose start) -->
+<clickhouse>
+  <users>
+    <api>
+      <password_sha256_hex from_env="DABI_CH_API_PW_SHA256"/>
+      <networks>
+        <ip>10.0.0.0/8</ip>
+        <ip>172.16.0.0/12</ip>
+      </networks>
+      <profile>readonly</profile>
+      <quota>default</quota>
+    </api>
+  </users>
+  <profiles>
+    <readonly>
+      <readonly>1</readonly>
+      <max_memory_usage>4000000000</max_memory_usage>
+    </readonly>
+  </profiles>
+</clickhouse>

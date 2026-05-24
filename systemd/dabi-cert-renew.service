@@ -1,0 +1,12 @@
+[Unit]
+Description=DABI Let's Encrypt certificate renewal (certbot)
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/dabi/deploy
+ExecStart=/usr/bin/docker run --rm \
+  -v /srv/dabi/letsencrypt:/etc/letsencrypt \
+  -v /var/www/dabi/current:/var/www/html \
+  certbot/certbot:arm64v8-latest renew --quiet
+ExecStartPost=/usr/bin/docker compose exec -T nginx nginx -s reload

@@ -1,0 +1,18 @@
+[project]
+name = "dabi-ingest"
+version = "0.1.0"
+description = "DABI unified ingest container — argparse-dispatched pipelines"
+requires-python = ">=3.14"
+
+[tool.ruff]
+line-length = 110
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = false
+ignore_missing_imports = true

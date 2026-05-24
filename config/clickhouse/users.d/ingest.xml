@@ -1,0 +1,20 @@
+<!-- ingest user: writer for dabi.*; no DDL -->
+<clickhouse>
+  <users>
+    <ingest>
+      <password_sha256_hex from_env="DABI_CH_INGEST_PW_SHA256"/>
+      <networks>
+        <ip>10.0.0.0/8</ip>
+        <ip>172.16.0.0/12</ip>
+      </networks>
+      <profile>writer</profile>
+      <quota>default</quota>
+    </ingest>
+  </users>
+  <profiles>
+    <writer>
+      <readonly>0</readonly>
+      <max_memory_usage>8000000000</max_memory_usage>
+    </writer>
+  </profiles>
+</clickhouse>

@@ -1,0 +1,11 @@
+[Unit]
+Description=DABI OpenINTEL prefix top lists weekly
+
+[Timer]
+OnCalendar=Mon *-*-* 23:15:00 UTC   ; 04:45 IST (Mondays)
+Persistent=true
+RandomizedDelaySec=300
+Unit=dabi-ingest@openintel-prefix.service
+
+[Install]
+WantedBy=timers.target

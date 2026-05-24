@@ -1,0 +1,11 @@
+[Unit]
+Description=DABI hourly backup timer
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=120
+Unit=dabi-backup.service
+
+[Install]
+WantedBy=timers.target

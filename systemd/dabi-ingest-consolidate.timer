@@ -1,0 +1,11 @@
+[Unit]
+Description=DABI cross-dataset OpenSearch consolidation pass
+
+[Timer]
+OnCalendar=*-*-* 05:30:00 UTC   ; 11:00 IST
+Persistent=true
+RandomizedDelaySec=300
+Unit=dabi-ingest@consolidate.service
+
+[Install]
+WantedBy=timers.target

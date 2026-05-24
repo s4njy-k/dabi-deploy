@@ -1,0 +1,8 @@
+<clickhouse>
+  <max_server_memory_usage from_env="CLICKHOUSE_MAX_MEMORY"/>
+  <max_concurrent_queries>50</max_concurrent_queries>
+  <background_pool_size>8</background_pool_size>
+  <merge_tree>
+    <max_part_size_to_merge>10737418240</max_part_size_to_merge>  <!-- 10 GiB -->
+  </merge_tree>
+</clickhouse>

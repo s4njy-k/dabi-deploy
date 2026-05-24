@@ -1,0 +1,16 @@
+[Unit]
+Description=DABI Zonestream — long-running WebSocket consumer (3 topics)
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/dabi/deploy
+ExecStartPre=/usr/bin/docker compose pull zonestream
+ExecStart=/usr/bin/docker compose up zonestream
+ExecStop=/usr/bin/docker compose stop zonestream
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

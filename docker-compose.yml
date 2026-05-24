@@ -1,0 +1,176 @@
+# DABI production stack — Plan v8 / Runbook v5
+# All image tags verified against Docker Hub on 2026-05-14
+#
+# Bring up:   docker compose up -d
+# Run ingest: docker compose run --rm ingest <subcommand>
+# Logs:       docker compose logs -f <service>
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "100m"
+    max-file: "3"
+    compress: "true"
+
+services:
+
+  search:
+    image: opensearchproject/opensearch:3
+    container_name: dabi-search
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - DISABLE_SECURITY_PLUGIN=true
+      - OPENSEARCH_JAVA_OPTS=-Xms${OPENSEARCH_HEAP:-30g} -Xmx${OPENSEARCH_HEAP:-30g} -XX:+UseG1GC
+      - cluster.routing.allocation.disk.watermark.low=80%
+      - cluster.routing.allocation.disk.watermark.high=85%
+      - cluster.routing.allocation.disk.watermark.flood_stage=90%
+      - TZ=Etc/UTC
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile:  { soft: 65536, hard: 65536 }
+    volumes:
+      - /srv/dabi/opensearch:/usr/share/opensearch/data
+      - ./config/opensearch/opensearch.yml:/usr/share/opensearch/config/opensearch.yml:ro
+    networks: [dabi-net]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    logging: *default-logging
+
+  analytics:
+    image: clickhouse/clickhouse-server:25.8
+    container_name: dabi-analytics
+    restart: unless-stopped
+    environment:
+      - TZ=Etc/UTC
+    ulimits:
+      memlock: { soft: -1, hard: -1 }
+      nofile:  { soft: 262144, hard: 262144 }
+    volumes:
+      - /srv/dabi/clickhouse:/var/lib/clickhouse
+      - ./config/clickhouse/config.d:/etc/clickhouse-server/config.d:ro
+      - ./config/clickhouse/users.d:/etc/clickhouse-server/users.d:ro
+      - ./config/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks: [dabi-net]
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging: *default-logging
+
+  redis:
+    image: redis:8.6
+    container_name: dabi-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --maxmemory 4gb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+    volumes:
+      - /srv/dabi/redis:/data
+    networks: [dabi-net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+
+  api:
+    image: asia-south1-docker.pkg.dev/${PROJECT}/dabi/api:${API_SHA}
+    container_name: dabi-api
+    restart: unless-stopped
+    depends_on:
+      search:    { condition: service_healthy }
+      analytics: { condition: service_healthy }
+      redis:     { condition: service_healthy }
+    environment:
+      - DABI_OS_URL=http://search:9200
+      - DABI_CH_URL=http://analytics:8123
+      - DABI_REDIS_URL=redis://redis:6379
+      - DABI_AUTH_DB=/srv/auth/auth.db
+      - TZ=Etc/UTC
+    volumes:
+      - /srv/dabi/auth:/srv/auth
+      - /run/dabi/secrets:/run/secrets:ro
+    networks: [dabi-net]
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8000/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+
+  nginx:
+    image: nginx:1.30
+    container_name: dabi-nginx
+    restart: unless-stopped
+    depends_on:
+      api: { condition: service_healthy }
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/nginx/dabi.conf:/etc/nginx/conf.d/default.conf:ro
+      - /srv/dabi/letsencrypt:/etc/letsencrypt
+      - /var/www/dabi/current:/var/www/dabi/current:ro
+    networks: [dabi-net]
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+
+  zonestream:
+    image: asia-south1-docker.pkg.dev/${PROJECT}/dabi/ingest:${INGEST_SHA}
+    container_name: dabi-zonestream
+    restart: unless-stopped
+    command: ["zonestream"]
+    depends_on:
+      search:    { condition: service_healthy }
+      analytics: { condition: service_healthy }
+      redis:     { condition: service_healthy }
+    environment:
+      - DABI_OS_URL=http://search:9200
+      - DABI_CH_URL=http://analytics:8123
+      - DABI_REDIS_URL=redis://redis:6379
+      - TZ=Etc/UTC
+    volumes:
+      - /srv/dabi/checkpoints:/checkpoints
+      - /run/dabi/secrets:/run/secrets:ro
+    networks: [dabi-net]
+    logging: *default-logging
+
+  # ingest is NOT started by `up -d` — systemd timers call:
+  #   docker compose run --rm ingest <subcommand>
+  ingest:
+    image: asia-south1-docker.pkg.dev/${PROJECT}/dabi/ingest:${INGEST_SHA}
+    profiles: ["scheduled"]
+    depends_on:
+      search:    { condition: service_healthy }
+      analytics: { condition: service_healthy }
+    environment:
+      - DABI_OS_URL=http://search:9200
+      - DABI_CH_URL=http://analytics:8123
+      - DABI_REDIS_URL=redis://redis:6379
+      - TZ=Etc/UTC
+    volumes:
+      - /srv/dabi/parquet:/parquet
+      - /srv/dabi/checkpoints:/checkpoints
+      - /mnt/scratch:/scratch
+      - /run/dabi/secrets:/run/secrets:ro
+    networks: [dabi-net]
+    logging: *default-logging
+
+networks:
+  dabi-net:
+    driver: bridge

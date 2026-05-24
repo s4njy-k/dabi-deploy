@@ -1,0 +1,11 @@
+[Unit]
+Description=DABI Parquet → GCS Nearline archive + scratch purge
+
+[Timer]
+OnCalendar=*-*-* 06:00:00 UTC   ; 11:30 IST
+Persistent=true
+RandomizedDelaySec=300
+Unit=dabi-ingest@archive.service
+
+[Install]
+WantedBy=timers.target

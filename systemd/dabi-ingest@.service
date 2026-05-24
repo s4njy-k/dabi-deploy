@@ -1,0 +1,16 @@
+[Unit]
+Description=DABI ingest pipeline: %i
+Documentation=https://github.com/<org>/dabi-deploy/blob/main/README.md
+After=network-online.target docker.service
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/dabi/deploy
+ExecStartPre=/usr/bin/docker compose --profile scheduled pull ingest
+ExecStart=/usr/bin/docker compose --profile scheduled run --rm ingest %i
+TimeoutStartSec=4h
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=5
