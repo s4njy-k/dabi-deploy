@@ -1,5 +1,6 @@
--- DABI ClickHouse schema — replayed on every analytics container start (idempotent)
--- All CREATE IF NOT EXISTS so reruns are safe
+-- DABI ClickHouse schema — runs ONLY on fresh /var/lib/clickhouse (docker-entrypoint-initdb.d
+-- behavior). All CREATE IF NOT EXISTS, so manual replay via scripts/replay-init-sql.sh is safe
+-- for container restarts that retained state.
 -- Documented in Plan v8 §13 (carried over from v6 §14.3)
 
 CREATE DATABASE IF NOT EXISTS dabi;

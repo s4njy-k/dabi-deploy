@@ -42,17 +42,26 @@ mountpoint -q "$SECRET_DIR" || mount -t tmpfs -o size=1m,mode=700 tmpfs "$SECRET
 echo "[*] Pulling secrets from Secret Manager..."
 "$(dirname "$0")/pull-secrets.sh"
 
-echo "[*] Rendering .env with PROJECT and SHAs..."
-# Fallback to default SHAs if not provided in the environment
+echo "[*] Rendering .env with PROJECT, SHAs, CH memory, and CH password SHA256s..."
 API_SHA=${API_SHA:-latest}
 INGEST_SHA=${INGEST_SHA:-latest}
 PROJECT=$(gcloud config get-value project)
+CLICKHOUSE_MAX_MEMORY=${CLICKHOUSE_MAX_MEMORY:-12884901888}    # 12 GiB per Plan v8 RAM budget
 
-# Render the .env file exactly as expected by docker-compose.yml
+# Source CH password SHA256s from tmpfs (populated by pull-secrets.sh above).
+# Hard fail if missing OR still 'placeholder' — analytics will not start otherwise (closes #1).
+DABI_CH_API_PW_SHA256=$(cat "$SECRET_DIR/dabi-ch-api-password-sha256" 2>/dev/null) || { echo "FATAL: $SECRET_DIR/dabi-ch-api-password-sha256 missing"; exit 1; }
+DABI_CH_INGEST_PW_SHA256=$(cat "$SECRET_DIR/dabi-ch-ingest-password-sha256" 2>/dev/null) || { echo "FATAL: $SECRET_DIR/dabi-ch-ingest-password-sha256 missing"; exit 1; }
+[[ "$DABI_CH_API_PW_SHA256"    == "placeholder" ]] && { echo "FATAL: dabi-ch-api-password-sha256 still 'placeholder' in Secret Manager"; exit 1; }
+[[ "$DABI_CH_INGEST_PW_SHA256" == "placeholder" ]] && { echo "FATAL: dabi-ch-ingest-password-sha256 still 'placeholder' in Secret Manager"; exit 1; }
+
 cat > "$DABI_ROOT/deploy/.env" <<EOF
 PROJECT=${PROJECT}
 API_SHA=${API_SHA}
 INGEST_SHA=${INGEST_SHA}
+CLICKHOUSE_MAX_MEMORY=${CLICKHOUSE_MAX_MEMORY}
+DABI_CH_API_PW_SHA256=${DABI_CH_API_PW_SHA256}
+DABI_CH_INGEST_PW_SHA256=${DABI_CH_INGEST_PW_SHA256}
 EOF
 
 echo "[*] Done. Next: docker compose pull && docker compose up -d"
