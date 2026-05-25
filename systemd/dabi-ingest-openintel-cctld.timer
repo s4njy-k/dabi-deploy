@@ -2,7 +2,7 @@
 Description=DABI OpenINTEL ccTLD apex weekly ingest
 
 [Timer]
-OnCalendar=Mon *-*-* 23:00:00 UTC   ; 04:30 IST (Mondays)
+OnCalendar=Mon *-*-* 23:00:00 UTC
 Persistent=true
 RandomizedDelaySec=300
 Unit=dabi-ingest@openintel-cctld.service

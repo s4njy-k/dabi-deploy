@@ -2,7 +2,7 @@
 Description=DABI OpenINTEL infrastructure (NS/MX) ingest
 
 [Timer]
-OnCalendar=*-*-* 00:30:00 UTC   ; 06:00 IST
+OnCalendar=*-*-* 00:30:00 UTC
 Persistent=true
 RandomizedDelaySec=300
 Unit=dabi-ingest@openintel-infra.service

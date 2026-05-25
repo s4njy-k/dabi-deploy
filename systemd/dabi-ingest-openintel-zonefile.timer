@@ -2,7 +2,7 @@
 Description=DABI OpenINTEL closed zone-based daily Parquet
 
 [Timer]
-OnCalendar=*-*-* 03:00:00 UTC   ; 08:30 IST
+OnCalendar=*-*-* 03:00:00 UTC
 Persistent=true
 RandomizedDelaySec=300
 Unit=dabi-ingest@openintel-zonefile.service

@@ -2,7 +2,7 @@
 Description=DABI weekly cert-renew timer
 
 [Timer]
-OnCalendar=Sun *-*-* 04:00:00 UTC   ; 09:30 IST
+OnCalendar=Sun *-*-* 04:00:00 UTC
 Persistent=true
 RandomizedDelaySec=1800
 Unit=dabi-cert-renew.service
