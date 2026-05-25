@@ -96,10 +96,14 @@ services:
       analytics: { condition: service_healthy }
       redis:     { condition: service_healthy }
     environment:
-      - DABI_OS_URL=http://search:9200
-      - DABI_CH_URL=http://analytics:8123
-      - DABI_REDIS_URL=redis://redis:6379
-      - DABI_AUTH_DB=/srv/auth/auth.db
+      - APP_ENV=production
+      - OPENSEARCH_URL=http://search:9200
+      - REDIS_URL=redis://redis:6379/0
+      - STATS_DB_PATH=/srv/auth/stats.db
+      - AUTH_DB_PATH=/srv/auth/auth.db
+      - FEATURES_TOOLS=false
+      - FEATURES_VT=false
+      - FEATURES_LIVENESS=false
       - TZ=Etc/UTC
     volumes:
       - /srv/dabi/auth:/srv/auth
@@ -143,9 +147,14 @@ services:
       analytics: { condition: service_healthy }
       redis:     { condition: service_healthy }
     environment:
-      - DABI_OS_URL=http://search:9200
-      - DABI_CH_URL=http://analytics:8123
-      - DABI_REDIS_URL=redis://redis:6379
+      - APP_ENV=production
+      - OPENSEARCH_URL=http://search:9200
+      - REDIS_URL=redis://redis:6379/0
+      - STATS_DB_PATH=/srv/auth/stats.db
+      - AUTH_DB_PATH=/srv/auth/auth.db
+      - FEATURES_TOOLS=false
+      - FEATURES_VT=false
+      - FEATURES_LIVENESS=false
       - TZ=Etc/UTC
     volumes:
       - /srv/dabi/checkpoints:/checkpoints
@@ -162,9 +171,14 @@ services:
       search:    { condition: service_healthy }
       analytics: { condition: service_healthy }
     environment:
-      - DABI_OS_URL=http://search:9200
-      - DABI_CH_URL=http://analytics:8123
-      - DABI_REDIS_URL=redis://redis:6379
+      - APP_ENV=production
+      - OPENSEARCH_URL=http://search:9200
+      - REDIS_URL=redis://redis:6379/0
+      - STATS_DB_PATH=/srv/auth/stats.db
+      - AUTH_DB_PATH=/srv/auth/auth.db
+      - FEATURES_TOOLS=false
+      - FEATURES_VT=false
+      - FEATURES_LIVENESS=false
       - TZ=Etc/UTC
     volumes:
       - /srv/dabi/parquet:/parquet
