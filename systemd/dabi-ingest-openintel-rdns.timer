@@ -2,7 +2,7 @@
 Description=DABI OpenINTEL IPv4 reverse-DNS daily → ClickHouse
 
 [Timer]
-OnCalendar=*-*-* 05:00:00 UTC   ; 10:30 IST
+OnCalendar=*-*-* 05:00:00 UTC
 Persistent=true
 RandomizedDelaySec=300
 Unit=dabi-ingest@openintel-rdns.service

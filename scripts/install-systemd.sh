@@ -1,5 +1,10 @@
 #!/bin/bash
-# install-systemd.sh — installs all DABI systemd units and enables timers
+# install-systemd.sh — install all DABI systemd units, enable only production-ready ones
+#
+# All units are copied to /etc/systemd/system/ (callable on demand), but
+# only PRODUCTION_TIMERS / PRODUCTION_SERVICES are auto-enabled and started.
+# Other units stay installed-but-disabled until their blocking gaps are
+# resolved (see project_dabi_stack memory for the deferred list).
 set -euo pipefail
 
 UNIT_DIR=/etc/systemd/system
@@ -9,24 +14,34 @@ echo "[*] Copying units from $SRC_DIR to $UNIT_DIR..."
 install -m 0644 "$SRC_DIR"/*.service "$UNIT_DIR/"
 install -m 0644 "$SRC_DIR"/*.timer   "$UNIT_DIR/"
 
-# Place the parameterized template
-install -m 0644 "$SRC_DIR"/dabi-ingest@.service "$UNIT_DIR/"
-
 echo "[*] systemctl daemon-reload"
 systemctl daemon-reload
 
-echo "[*] Enabling timers..."
-for t in "$SRC_DIR"/*.timer; do
-  name=$(basename "$t")
-  systemctl enable --now "$name"
-  echo "  enabled $name"
+# Production-ready units (auto-enable + start)
+PRODUCTION_TIMERS=(
+  dabi-cert-renew.timer
+)
+PRODUCTION_SERVICES=()
+
+# Deferred (installed-but-NOT-enabled) — re-enable individually as gaps close:
+#   dabi-backup.timer            — needs OpenSearch snapshot repo 'dabi-backup' (Day-2)
+#   dabi-ingest-*.timer (11)     — dabi_ingest CLI subcommands not implemented yet
+#                                  (czds, archive, consolidate, openintel-*, rir)
+#   dabi-zonestream.service      — same: 'zonestream' CLI subcommand missing
+
+echo "[*] Enabling production-ready timers..."
+for t in "${PRODUCTION_TIMERS[@]}"; do
+  systemctl enable --now "$t"
+  echo "  enabled $t"
 done
 
-echo "[*] Enabling long-running services..."
-for s in dabi-zonestream.service; do
-  systemctl enable --now "$s"
-  echo "  enabled $s"
-done
+if [ ${#PRODUCTION_SERVICES[@]} -gt 0 ]; then
+  echo "[*] Enabling production-ready services..."
+  for s in "${PRODUCTION_SERVICES[@]}"; do
+    systemctl enable --now "$s"
+    echo "  enabled $s"
+  done
+fi
 
-echo "[*] Done. Status:"
-systemctl list-timers 'dabi-*'
+echo "[*] Done. Active dabi-* timers:"
+systemctl list-timers 'dabi-*' --no-pager 2>&1 || true
