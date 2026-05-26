@@ -1,0 +1,11 @@
+[Unit]
+Description=DABI CT log daily stream sample (certstream)
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/dabi/deploy
+ExecStart=/srv/dabi/deploy/scripts/run-ctlog-pipeline.sh
+TimeoutStartSec=30min
+Nice=10
