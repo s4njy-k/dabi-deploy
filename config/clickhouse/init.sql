@@ -103,6 +103,21 @@ ORDER BY (prefix_start, prefix_end);
 --   '<HMAC_KEY>', '<HMAC_SECRET>', 'Parquet'
 -- );
 
+
+-- ============================================================
+-- Tranco daily top-1M list (OpenINTEL toplist equivalent — public source)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS dabi.tranco_top1m
+(
+    rank          UInt32 CODEC(T64, LZ4),
+    domain        LowCardinality(String) CODEC(ZSTD(3)),
+    apex          LowCardinality(String) CODEC(ZSTD(3)),
+    observed_date Date
+)
+ENGINE = ReplacingMergeTree(observed_date)
+PARTITION BY observed_date
+ORDER BY (rank, domain);
+
 -- Record this baseline migration
 INSERT INTO dabi.schema_migrations (version, description)
 SELECT 1, 'v8 baseline: rdns, ct_fqdn_observations, apex_ct_aggregates_mv, rir_whois'
