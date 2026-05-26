@@ -1,0 +1,11 @@
+[Unit]
+Description=DABI daily reverse-DNS resolution of dns_observations A-record IPs
+After=network-online.target docker.service dabi-ingest-dns.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/dabi/deploy
+ExecStart=/srv/dabi/deploy/scripts/run-rdns-pipeline.sh
+TimeoutStartSec=30min
+Nice=10

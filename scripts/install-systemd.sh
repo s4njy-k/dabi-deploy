@@ -25,6 +25,7 @@ PRODUCTION_TIMERS=(
   dabi-ingest-ctlog.timer
   dabi-ingest-dns.timer
   dabi-ingest-rir.timer
+  dabi-ingest-rdns.timer
 )
 PRODUCTION_SERVICES=()
 
