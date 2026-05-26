@@ -1,11 +1,11 @@
 [Unit]
-Description=DABI RIR-level WHOIS + rDNS daily
+Description=DABI RIR ingest daily timer
 
 [Timer]
-OnCalendar=*-*-* 23:30:00 UTC
+OnCalendar=*-*-* 03:30:00 UTC
 Persistent=true
 RandomizedDelaySec=300
-Unit=dabi-ingest@rir.service
+Unit=dabi-ingest-rir.service
 
 [Install]
 WantedBy=timers.target

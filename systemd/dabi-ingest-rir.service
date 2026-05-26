@@ -1,0 +1,11 @@
+[Unit]
+Description=DABI daily RIR delegated-extended ingest
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/dabi/deploy
+ExecStart=/srv/dabi/deploy/scripts/run-rir-pipeline.sh
+TimeoutStartSec=30min
+Nice=10
