@@ -1,0 +1,11 @@
+[Unit]
+Description=DABI DNS resolve daily timer
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 UTC
+Persistent=true
+RandomizedDelaySec=300
+Unit=dabi-ingest-dns.service
+
+[Install]
+WantedBy=timers.target

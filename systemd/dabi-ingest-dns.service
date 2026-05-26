@@ -1,0 +1,11 @@
+[Unit]
+Description=DABI daily forward DNS resolution of top Tranco domains
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/dabi/deploy
+ExecStart=/srv/dabi/deploy/scripts/run-dns-pipeline.sh
+TimeoutStartSec=30min
+Nice=10

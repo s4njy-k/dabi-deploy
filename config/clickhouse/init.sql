@@ -118,6 +118,24 @@ ENGINE = ReplacingMergeTree(observed_date)
 PARTITION BY observed_date
 ORDER BY (rank, domain);
 
+
+-- ============================================================
+-- Forward DNS observations (OpenINTEL rdns/infra equivalent — Phase 3 enrichment)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS dabi.dns_observations
+(
+    fqdn          String CODEC(ZSTD(3)),
+    apex          LowCardinality(String) CODEC(ZSTD(3)),
+    record_type   LowCardinality(String),
+    value         String CODEC(ZSTD(3)),
+    ttl           UInt32 CODEC(T64, LZ4),
+    observed_at   DateTime CODEC(DoubleDelta, LZ4),
+    observed_date Date
+)
+ENGINE = ReplacingMergeTree(observed_at)
+PARTITION BY toYYYYMM(observed_date)
+ORDER BY (fqdn, record_type, value, observed_date);
+
 -- Record this baseline migration
 INSERT INTO dabi.schema_migrations (version, description)
 SELECT 1, 'v8 baseline: rdns, ct_fqdn_observations, apex_ct_aggregates_mv, rir_whois'
