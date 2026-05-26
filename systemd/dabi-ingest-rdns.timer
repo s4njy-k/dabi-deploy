@@ -1,0 +1,11 @@
+[Unit]
+Description=DABI reverse-DNS daily timer
+
+[Timer]
+OnCalendar=*-*-* 02:50:00 UTC
+Persistent=true
+RandomizedDelaySec=180
+Unit=dabi-ingest-rdns.service
+
+[Install]
+WantedBy=timers.target
