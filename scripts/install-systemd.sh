@@ -20,6 +20,7 @@ systemctl daemon-reload
 # Production-ready units (auto-enable + start)
 PRODUCTION_TIMERS=(
   dabi-cert-renew.timer
+  dabi-ingest-czds.timer
 )
 PRODUCTION_SERVICES=()
 

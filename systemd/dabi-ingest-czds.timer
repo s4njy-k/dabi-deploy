@@ -5,7 +5,7 @@ Description=DABI ICANN CZDS daily zone-file pull
 OnCalendar=*-*-* 01:30:00 UTC
 Persistent=true
 RandomizedDelaySec=300
-Unit=dabi-ingest@czds.service
+Unit=dabi-ingest-czds.service
 
 [Install]
 WantedBy=timers.target

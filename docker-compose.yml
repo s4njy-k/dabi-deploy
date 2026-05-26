@@ -26,6 +26,8 @@ services:
       - cluster.routing.allocation.disk.watermark.high=85%
       - cluster.routing.allocation.disk.watermark.flood_stage=90%
       - TZ=Etc/UTC
+      - DABI_DATA_DIR=/parquet
+      - DABI_LOCK_DIR=/checkpoints
     ulimits:
       memlock: { soft: -1, hard: -1 }
       nofile:  { soft: 65536, hard: 65536 }
@@ -47,6 +49,8 @@ services:
     restart: unless-stopped
     environment:
       - TZ=Etc/UTC
+      - DABI_DATA_DIR=/parquet
+      - DABI_LOCK_DIR=/checkpoints
       - CLICKHOUSE_MAX_MEMORY=${CLICKHOUSE_MAX_MEMORY}
       - DABI_CH_API_PW_SHA256=${DABI_CH_API_PW_SHA256}
       - DABI_CH_INGEST_PW_SHA256=${DABI_CH_INGEST_PW_SHA256}
@@ -105,6 +109,8 @@ services:
       - FEATURES_VT=false
       - FEATURES_LIVENESS=false
       - TZ=Etc/UTC
+      - DABI_DATA_DIR=/parquet
+      - DABI_LOCK_DIR=/checkpoints
     volumes:
       - /srv/dabi/auth:/srv/auth
       - /run/dabi/secrets:/run/secrets:ro
@@ -157,6 +163,8 @@ services:
       - FEATURES_VT=false
       - FEATURES_LIVENESS=false
       - TZ=Etc/UTC
+      - DABI_DATA_DIR=/parquet
+      - DABI_LOCK_DIR=/checkpoints
     volumes:
       - /srv/dabi/checkpoints:/checkpoints
       - /run/dabi/secrets:/run/secrets:ro
@@ -181,6 +189,8 @@ services:
       - FEATURES_VT=false
       - FEATURES_LIVENESS=false
       - TZ=Etc/UTC
+      - DABI_DATA_DIR=/parquet
+      - DABI_LOCK_DIR=/checkpoints
     volumes:
       - /srv/dabi/parquet:/parquet
       - /srv/dabi/checkpoints:/checkpoints
