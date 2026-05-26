@@ -21,6 +21,7 @@ systemctl daemon-reload
 PRODUCTION_TIMERS=(
   dabi-cert-renew.timer
   dabi-ingest-czds.timer
+  dabi-ingest-tranco.timer
 )
 PRODUCTION_SERVICES=()
 

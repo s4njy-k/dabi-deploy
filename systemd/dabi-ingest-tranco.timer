@@ -1,0 +1,11 @@
+[Unit]
+Description=DABI Tranco daily timer
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 UTC
+Persistent=true
+RandomizedDelaySec=300
+Unit=dabi-ingest-tranco.service
+
+[Install]
+WantedBy=timers.target
