@@ -15,7 +15,9 @@ x-logging: &default-logging
 services:
 
   search:
-    image: opensearchproject/opensearch:3
+    build:
+      context: ./config/opensearch
+    image: dabi-opensearch:3
     container_name: dabi-search
     restart: unless-stopped
     environment:
