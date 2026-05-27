@@ -105,6 +105,10 @@ services:
       - APP_ENV=production
       - OPENSEARCH_URL=http://search:9200
       - REDIS_URL=redis://redis:6379/0
+      - CLICKHOUSE_URL=http://analytics:8123
+      - CLICKHOUSE_DATABASE=dabi
+      - CLICKHOUSE_USER=api
+      - CLICKHOUSE_PASSWORD_FILE=/run/secrets/dabi-ch-api-password
       - STATS_DB_PATH=/srv/auth/stats.db
       - AUTH_DB_PATH=/srv/auth/auth.db
       - FEATURES_TOOLS=false
