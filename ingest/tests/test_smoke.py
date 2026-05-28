@@ -16,8 +16,9 @@ def test_help_succeeds():
 
 def test_all_pipelines_importable():
     """Each pipeline module exposes PIPELINE, DESCRIPTION, add_args, run."""
-    from dabi_ingest.__main__ import PIPELINES
     import importlib
+
+    from dabi_ingest.__main__ import PIPELINES
     for name in PIPELINES:
         mod = importlib.import_module(f"dabi_ingest.pipelines.{name.replace('-', '_')}")
         assert hasattr(mod, "PIPELINE")

@@ -18,7 +18,6 @@ import argparse
 import datetime
 import gzip
 import io
-from datetime import timezone
 
 import requests
 import structlog
@@ -51,7 +50,7 @@ SETTINGS index_granularity = 8192
 
 
 def _default_partition_date() -> str:
-    return (datetime.datetime.now(timezone.utc).date() - datetime.timedelta(days=1)).isoformat()
+    return (datetime.datetime.now(datetime.UTC).date() - datetime.timedelta(days=1)).isoformat()
 
 
 def add_args(parser: argparse.ArgumentParser) -> None:

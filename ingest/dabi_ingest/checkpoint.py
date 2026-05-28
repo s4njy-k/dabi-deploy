@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 CHECKPOINT_ROOT = Path("/checkpoints")
@@ -57,7 +57,7 @@ def run(pipeline: str, partition_date: str):
             ... do work ...
             cp.set_rows(15_234)
     """
-    started = datetime.now(timezone.utc).isoformat()
+    started = datetime.now(UTC).isoformat()
     with _conn(pipeline) as cx:
         cur = cx.execute(
             "SELECT COALESCE(MAX(attempt),0)+1 FROM runs WHERE partition_date=?",
@@ -86,7 +86,7 @@ def run(pipeline: str, partition_date: str):
             cx.execute(
                 "UPDATE runs SET status='failed', error=?, completed_at=? "
                 "WHERE partition_date=? AND attempt=?",
-                (repr(exc)[:500], datetime.now(timezone.utc).isoformat(),
+                (repr(exc)[:500], datetime.now(UTC).isoformat(),
                  partition_date, attempt),
             )
             cx.commit()
@@ -96,7 +96,7 @@ def run(pipeline: str, partition_date: str):
             cx.execute(
                 "UPDATE runs SET status='ok', completed_at=?, output_rows=? "
                 "WHERE partition_date=? AND attempt=?",
-                (datetime.now(timezone.utc).isoformat(),
+                (datetime.now(UTC).isoformat(),
                  cp.output_rows, partition_date, attempt),
             )
             cx.commit()

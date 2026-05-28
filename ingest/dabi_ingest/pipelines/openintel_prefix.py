@@ -8,7 +8,7 @@ real logic is filled in.
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 
@@ -22,7 +22,7 @@ log = structlog.get_logger(PIPELINE)
 
 def _default_partition_date() -> str:
     """Default to yesterday (UTC); most OpenINTEL/CZDS publish previous-day data."""
-    return (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
+    return (datetime.now(UTC).date() - timedelta(days=1)).isoformat()
 
 
 def add_args(parser: argparse.ArgumentParser) -> None:
