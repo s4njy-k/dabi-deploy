@@ -195,10 +195,11 @@ services:
       - FEATURES_VT=false
       - FEATURES_LIVENESS=false
       - TZ=Etc/UTC
-      - DABI_DATA_DIR=/parquet
+      - DABI_DATA_DIR=/scratch/parquet
       - DABI_LOCK_DIR=/checkpoints
+      - DABI_CZDS_TLDS=${DABI_CZDS_TLDS:-online}
+      - DABI_RETAIN_DAILY_SNAPSHOTS=${DABI_RETAIN_DAILY_SNAPSHOTS:-7}
     volumes:
-      - /srv/dabi/parquet:/parquet
       - /srv/dabi/checkpoints:/checkpoints
       - /mnt/scratch:/scratch
       - /run/dabi/secrets:/run/secrets:ro
