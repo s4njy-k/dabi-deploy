@@ -1,28 +1,33 @@
 #!/bin/bash
-# run-czds-pipeline.sh — fetch + index for a list of approved CZDS TLDs.
+# run-czds-pipeline.sh — auto-discover all approved CZDS TLDs and ingest each.
 # Called by dabi-ingest-czds.timer (per the systemd dabi-ingest@.service template).
-# TLDs are space-separated; provide them via the DABI_CZDS_TLDS env var (set in .env).
+#
+# This is now a thin shim — all the TLD discovery, filtering, checkpointing,
+# disk-safety, and per-TLD failure isolation lives in `dabi-ingest czds-all`
+# inside the ingest container. Override behaviour via .env knobs:
+#
+#   DABI_CZDS_EXCLUDE        — space-separated TLDs to skip (e.g. "com net")
+#   DABI_CZDS_MAX_SIZE_MB    — skip zones larger than this (default 2000)
+#   DABI_CZDS_DISK_MAX_PCT   — refuse to start if disks >this% full (default 85)
+#
 set -euo pipefail
 
-# Read DABI_CZDS_TLDS (and any other DABI_* vars) from .env so systemd-triggered
-# runs see them. The wrapper is invoked both manually and by
-# dabi-ingest-czds.service which has no EnvironmentFile= directive.
+# Source .env so DABI_CZDS_EXCLUDE etc reach docker compose run via -e flags
 if [ -f /srv/dabi/deploy/.env ]; then
   set -a; . /srv/dabi/deploy/.env; set +a
 fi
 
-DABI_CZDS_TLDS="${DABI_CZDS_TLDS:-online}"
+MAX_SIZE_MB="${DABI_CZDS_MAX_SIZE_MB:-2000}"
+DISK_MAX_PCT="${DABI_CZDS_DISK_MAX_PCT:-85}"
 
 cd /srv/dabi/deploy
 
-for tld in $DABI_CZDS_TLDS; do
-  echo "[czds-pipeline] === TLD: $tld ==="
-  # Pull (NOT pull+up — just refresh the image cache)
-  docker compose --profile scheduled pull ingest
-  # Fetch zone file -> records.parquet
-  docker compose --profile scheduled run --rm ingest fetch czds --tld "$tld"
-  # Run Stages 2-9 -> OpenSearch
-  docker compose --profile scheduled run --rm ingest run --tld "$tld"
-done
+# Refresh image cache once (no-op if already at latest INGEST_SHA)
+docker compose --profile scheduled pull ingest
+
+# Single batch invocation — czds-all auto-discovers, checkpoints, isolates failures
+docker compose --profile scheduled run --rm ingest czds-all \
+  --max-size-mb "$MAX_SIZE_MB" \
+  --disk-max-pct "$DISK_MAX_PCT"
 
 echo "[czds-pipeline] done."
