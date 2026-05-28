@@ -5,6 +5,7 @@ The skeleton below establishes the argparse contract, logging, checkpoint use,
 and exit code semantics so systemd timers can be wired immediately while the
 real logic is filled in.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -15,7 +16,9 @@ import structlog
 from dabi_ingest import checkpoint
 
 PIPELINE = "openintel-prefix"
-DESCRIPTION = "OpenINTEL prefix top lists — weekly (Mondays). BGP-prefix popularity for /trends Hosting Abuse panel."
+DESCRIPTION = (
+    "OpenINTEL prefix top lists — weekly (Mondays). BGP-prefix popularity for /trends Hosting Abuse panel."
+)
 
 log = structlog.get_logger(PIPELINE)
 

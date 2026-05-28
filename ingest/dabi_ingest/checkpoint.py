@@ -11,6 +11,7 @@ Contract:
     3. On success: status='ok', completed_at=now, output_rows=<count>.
     4. On failure: status='failed', error=<reason>.
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -53,9 +54,9 @@ def is_done(pipeline: str, partition_date: str) -> bool:
 def run(pipeline: str, partition_date: str):
     """Yield a logger-friendly run context; auto-marks status on exit.
 
-        with checkpoint.run("czds", "2026-05-14") as cp:
-            ... do work ...
-            cp.set_rows(15_234)
+    with checkpoint.run("czds", "2026-05-14") as cp:
+        ... do work ...
+        cp.set_rows(15_234)
     """
     started = datetime.now(UTC).isoformat()
     with _conn(pipeline) as cx:
@@ -65,8 +66,7 @@ def run(pipeline: str, partition_date: str):
         )
         attempt = int(cur.fetchone()[0])
         cx.execute(
-            "INSERT INTO runs (partition_date, attempt, status, started_at) "
-            "VALUES (?, ?, 'running', ?)",
+            "INSERT INTO runs (partition_date, attempt, status, started_at) VALUES (?, ?, 'running', ?)",
             (partition_date, attempt, started),
         )
         cx.commit()
@@ -86,8 +86,7 @@ def run(pipeline: str, partition_date: str):
             cx.execute(
                 "UPDATE runs SET status='failed', error=?, completed_at=? "
                 "WHERE partition_date=? AND attempt=?",
-                (repr(exc)[:500], datetime.now(UTC).isoformat(),
-                 partition_date, attempt),
+                (repr(exc)[:500], datetime.now(UTC).isoformat(), partition_date, attempt),
             )
             cx.commit()
         raise
@@ -96,7 +95,6 @@ def run(pipeline: str, partition_date: str):
             cx.execute(
                 "UPDATE runs SET status='ok', completed_at=?, output_rows=? "
                 "WHERE partition_date=? AND attempt=?",
-                (datetime.now(UTC).isoformat(),
-                 cp.output_rows, partition_date, attempt),
+                (datetime.now(UTC).isoformat(), cp.output_rows, partition_date, attempt),
             )
             cx.commit()

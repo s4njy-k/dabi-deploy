@@ -12,6 +12,7 @@ URL template:
 Output: dabi.openintel_cctld (ReplacingMergeTree, partitioned by tld)
 Timer:  weekly Monday 23:00 UTC via dabi-ingest-openintel-cctld.timer
 """
+
 from __future__ import annotations
 
 import argparse

@@ -1,4 +1,5 @@
 """Shared secret-reading helper. /run/secrets/* is populated by scripts/pull-secrets.sh."""
+
 from __future__ import annotations
 
 from pathlib import Path

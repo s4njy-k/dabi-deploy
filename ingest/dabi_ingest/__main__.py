@@ -5,6 +5,7 @@ Each pipeline lives in dabi_ingest.pipelines.<name> and exposes:
     def add_args(parser: argparse.ArgumentParser) -> None: ...
     def run(args: argparse.Namespace) -> int: ...
 """
+
 from __future__ import annotations
 
 import argparse
@@ -47,10 +48,8 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="dabi-ingest",
         description="DABI unified ingest dispatcher",
     )
-    parser.add_argument("--log-level", default="INFO",
-                        choices=["DEBUG", "INFO", "WARNING", "ERROR"])
-    sub = parser.add_subparsers(dest="pipeline", required=True,
-                                metavar="<pipeline>")
+    parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
+    sub = parser.add_subparsers(dest="pipeline", required=True, metavar="<pipeline>")
     for name in PIPELINES:
         # convert kebab-case CLI name to snake_case module name
         mod_name = name.replace("-", "_")

@@ -5,4 +5,5 @@ Each pipeline is a subcommand invoked via:
 
 Subcommands dispatch through dabi_ingest.__main__.
 """
+
 __version__ = "0.1.0"

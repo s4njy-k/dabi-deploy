@@ -5,6 +5,7 @@ The skeleton below establishes the argparse contract, logging, checkpoint use,
 and exit code semantics so systemd timers can be wired immediately while the
 real logic is filled in.
 """
+
 from __future__ import annotations
 
 import argparse
