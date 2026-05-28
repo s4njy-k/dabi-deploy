@@ -1,0 +1,14 @@
+[Unit]
+Description=DABI OpenINTEL ccTLD apex weekly ingest
+After=network-online.target docker.service
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/dabi/deploy
+ExecStart=/srv/dabi/deploy/scripts/run-openintel-cctld-pipeline.sh
+TimeoutStartSec=30min
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=5

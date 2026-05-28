@@ -20,7 +20,7 @@ def clickhouse():
     host = url.split("//", 1)[-1].split(":", 1)[0]
     port = int(url.rsplit(":", 1)[-1]) if ":" in url.split("//", 1)[-1] else 8123
     user = os.environ.get("DABI_CH_USER", "ingest")
-    password = _read_secret("dabi-ch-ingest-password-sha256") or ""
+    password = _read_secret("dabi-ch-ingest-password") or ""
     return clickhouse_connect.get_client(
         host=host, port=port, username=user, password=password,
         database="dabi",

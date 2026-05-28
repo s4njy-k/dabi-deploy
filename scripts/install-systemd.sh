@@ -26,6 +26,7 @@ PRODUCTION_TIMERS=(
   dabi-ingest-dns.timer
   dabi-ingest-rir.timer
   dabi-ingest-rdns.timer
+  dabi-ingest-openintel-cctld.timer
 )
 PRODUCTION_SERVICES=()
 
