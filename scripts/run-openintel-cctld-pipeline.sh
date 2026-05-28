@@ -1,7 +1,13 @@
 #!/bin/bash
-# run-openintel-cctld-pipeline.sh — ingest top-10 ccTLD apex lists (CT + Tranco sources).
-# Uses dabi-ingest:local image built from dabi-deploy/ingest/ via:
-#   docker compose build ingest
+# run-openintel-cctld-pipeline.sh — ingest top-10 ccTLD apex lists from OpenINTEL.
+#
+# Uses dabi-ingest:local — the dabi-deploy/ingest/ image built separately from the
+# domain-search-pro ingest image (INGEST_SHA). The two images coexist:
+#   INGEST_SHA  → domain-search-pro image  (czds-all, fetch rir/tranco/dns/rdns/ctlog)
+#   dabi-ingest:local → dabi-deploy image  (openintel-cctld + future new pipelines)
+#
+# Rebuild the local image after any change to dabi-deploy/ingest/:
+#   docker build -t dabi-ingest:local /srv/dabi/deploy/ingest/
 set -euo pipefail
 
 if [ -f /srv/dabi/deploy/.env ]; then
