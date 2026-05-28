@@ -197,7 +197,7 @@ services:
       - TZ=Etc/UTC
       - DABI_DATA_DIR=/scratch/parquet
       - DABI_LOCK_DIR=/checkpoints
-      - DABI_CZDS_TLDS=${DABI_CZDS_TLDS:-online}
+      - DABI_CZDS_EXCLUDE=${DABI_CZDS_EXCLUDE:-}
       - DABI_RETAIN_DAILY_SNAPSHOTS=${DABI_RETAIN_DAILY_SNAPSHOTS:-7}
     volumes:
       - /srv/dabi/checkpoints:/checkpoints
