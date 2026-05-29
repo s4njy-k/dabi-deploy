@@ -28,12 +28,13 @@ from opensearchpy.helpers import parallel_bulk
 from dabi_ingest import checkpoint, clients
 
 PIPELINE = "openintel-cctld"
-DESCRIPTION = "OpenINTEL ccTLD apex lists — top 10 ccTLDs, ~38M domains/week."
+DESCRIPTION = "OpenINTEL ccTLD apex lists — all available ccTLDs auto-discovered weekly."
 
 log = structlog.get_logger(PIPELINE)
 
 _BASE = "https://object.openintel.nl/seeseetld/lists"
-TOP_10_CCTLDS = ["de", "uk", "nl", "ru", "br", "eu", "cn", "au", "it", "fr"]
+_LISTING_URL = "https://openintel.nl/download/domain-lists/cctlds/"
+_TERMS_URL = "https://openintel.nl/download/terms/"
 
 _CHUNK_CH = 200_000
 _CHUNK_OS = 25_000  # docs per parallel_bulk request
@@ -69,9 +70,9 @@ def add_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--tlds",
         nargs="+",
-        default=TOP_10_CCTLDS,
+        default=None,
         metavar="TLD",
-        help=f"ccTLDs to ingest. Default: all top 10 ({' '.join(TOP_10_CCTLDS)}).",
+        help="Explicit TLD list. Default: auto-discover all available from OpenINTEL listing.",
     )
     parser.add_argument(
         "--look-back",
@@ -93,7 +94,19 @@ def add_args(parser: argparse.ArgumentParser) -> None:
 
 
 def run(args: argparse.Namespace) -> int:
-    log_ = log.bind(partition_date=args.partition_date, tlds=args.tlds)
+    snap_date = datetime.date.fromisoformat(args.partition_date)
+
+    # Auto-discover TLDs from OpenINTEL listing if not explicitly provided
+    if args.tlds:
+        tlds = args.tlds
+    else:
+        tlds = _discover_available_tlds(snap_date, args.look_back)
+        if not tlds:
+            log.error("discover.failed", msg="No ccTLDs found on OpenINTEL listing")
+            return 1
+
+    log_ = log.bind(partition_date=args.partition_date, tld_count=len(tlds))
+    log_.info("pipeline.tlds", tlds=tlds)
 
     if not args.force and checkpoint.is_done(PIPELINE, args.partition_date):
         log_.info("checkpoint.skip", reason="already done")
@@ -107,13 +120,11 @@ def run(args: argparse.Namespace) -> int:
     ch.command(_DDL)
     log_.info("schema.ensured")
 
-    snap_date = datetime.date.fromisoformat(args.partition_date)
-
     with checkpoint.run(PIPELINE, args.partition_date) as cp:
         total_ch = 0
         total_os = 0
 
-        for tld in args.tlds:
+        for tld in tlds:
             n_ch = _fetch_and_load_ch(ch, tld, snap_date, snap_date, args.look_back, log_)
             total_ch += n_ch
 
@@ -122,9 +133,49 @@ def run(args: argparse.Namespace) -> int:
                 total_os += n_os
 
         cp.set_rows(total_ch)
-        log_.info("done", total_ch=total_ch, total_os=total_os)
+        log_.info("done", total_ch=total_ch, total_os=total_os, tlds_processed=len(tlds))
 
     return 0
+
+
+# ── TLD discovery ────────────────────────────────────────────────────────────
+
+
+def _discover_available_tlds(target: datetime.date, look_back: int) -> list[str]:
+    """Scrape OpenINTEL listing page for all ccTLDs, then probe which have recent data."""
+    import re as _re
+
+    log.info("discover.start", listing=_LISTING_URL)
+
+    # Accept terms (sets cookie) then fetch the listing
+    sess = requests.Session()
+    try:
+        sess.post(_TERMS_URL, params={"redirect_uri": "/download/domain-lists/cctlds/"}, timeout=20)
+        resp = sess.get(_LISTING_URL, timeout=20)
+        resp.raise_for_status()
+    except requests.RequestException as exc:
+        log.error("discover.listing_failed", error=str(exc))
+        return []
+
+    listed = sorted(set(_re.findall(r"tld=([a-z]{2,6})", resp.text)))
+    log.info("discover.listed", count=len(listed))
+
+    # Probe each TLD in parallel for recent data availability.
+    # cap at 20 workers to avoid rate-limiting on object.openintel.nl.
+    import concurrent.futures as _cf
+
+    def _probe(tld: str) -> tuple[str, bool]:
+        return tld, _find_url(tld, target, look_back, log) is not None
+
+    available = []
+    with _cf.ThreadPoolExecutor(max_workers=20) as ex:
+        for tld, ok in ex.map(_probe, listed):
+            if ok:
+                available.append(tld)
+
+    available.sort()
+    log.info("discover.available", count=len(available), tlds=available)
+    return available
 
 
 # ── ClickHouse load ───────────────────────────────────────────────────────────
