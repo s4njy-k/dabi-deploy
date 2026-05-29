@@ -23,6 +23,7 @@ tar -xzf "$TMP/$TARBALL" -C "$TMP/dist/"
 echo "[*] Syncing into $DIST_DIR (atomic per-file via rsync --delete)..."
 sudo mkdir -p "$DIST_DIR"
 sudo rsync -a --delete "$TMP/dist/" "$DIST_DIR/"
+sudo chmod -R a+rX "$DIST_DIR"
 
 echo "[*] Done. web ${WEB_SHA} installed to $DIST_DIR"
 ls -la "$DIST_DIR" | head -5
