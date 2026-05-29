@@ -13,8 +13,9 @@ echo "[smoke] running 10 checks..."
 # 1. nginx
 curl -fsk https://localhost/healthz >/dev/null && pass "nginx :443 /healthz" || fail "nginx :443"
 
-# 2. api healthz (via nginx)
-curl -fsk https://localhost/api/healthz >/dev/null && pass "api /api/healthz" || fail "api"
+# 2. api healthz (inside API container; public /api/* is auth-protected)
+docker compose exec -T api python -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen("http://localhost:8000/healthz",timeout=3).status==200 else 1)' \
+  && pass "api container /healthz" || fail "api"
 
 # 3. OpenSearch cluster green
 status=$(docker compose exec -T search curl -sf http://localhost:9200/_cluster/health \
