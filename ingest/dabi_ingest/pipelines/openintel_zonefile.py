@@ -7,7 +7,9 @@ import argparse
 from dabi_ingest.pipelines import _fdns_common as fc
 
 PIPELINE = "openintel-zonefile"
-DESCRIPTION = "OpenINTEL forward-DNS zone-based — resolved A/AAAA/NS/MX/CNAME/TXT/SOA per apex for public zones."
+DESCRIPTION = (
+    "OpenINTEL forward-DNS zone-based — resolved A/AAAA/NS/MX/CNAME/TXT/SOA per apex for public zones."
+)
 
 # Public zone-based sources on object.openintel.nl (auto-discovery is preferred; this is the fallback).
 DEFAULT_SOURCES = ["ch", "ee", "fr", "se", "sk", "li", "nu", "gov", "fed.us", "root"]

@@ -48,8 +48,11 @@ ENGINE = MergeTree
 PARTITION BY toYYYYMM(observed_date)
 ORDER BY (apex, query_type, response)
 TTL observed_date + INTERVAL {RETAIN_DAYS} DAY
-SETTINGS storage_policy = 'scratch', index_granularity = 8192
+SETTINGS storage_policy = 'scratch', index_granularity = 8192,
+         lightweight_mutation_projection_mode = 'rebuild'
 """
+# lightweight_mutation_projection_mode='rebuild' lets the idempotent per-(source,date)
+# DELETE run despite proj_by_response (CH otherwise THROWs on delete with projections).
 
 DDL_PROJECTION = """
 ALTER TABLE dabi.dns_records
@@ -65,13 +68,14 @@ CREATE TABLE IF NOT EXISTS dabi.dns_current
     response    String,
     ttl         UInt32,
     source      LowCardinality(String),
-    first_seen  Date,
     last_seen   Date
 )
 ENGINE = ReplacingMergeTree(last_seen)
 ORDER BY (apex, query_type, response)
 SETTINGS storage_policy = 'scratch'
 """
+# NB: dns_current is a latest-state cache only (last_seen = newest snapshot date).
+# Authoritative first-seen / last-seen / full history is in dns_records (observed_date).
 
 
 def ensure_schema(ch) -> None:
@@ -106,8 +110,7 @@ def parse_parts(html: str) -> list[str]:
 def listing_url_for(basis: str, source: str, year: int, month: int, day: int) -> str:
     """Website listing URL for a given day (path segments are %3D-encoded, per OpenINTEL)."""
     return (
-        f"{LISTING_BASE}/basis={basis}/source={source}/"
-        f"year%3D{year:04d}/month%3D{month:02d}/day%3D{day:02d}/"
+        f"{LISTING_BASE}/basis={basis}/source={source}/year%3D{year:04d}/month%3D{month:02d}/day%3D{day:02d}/"
     )
 
 
@@ -191,17 +194,25 @@ SETTINGS max_http_get_redirects = 5
 def build_current_upsert_sql(date: str) -> str:
     """Roll the day's rows into dns_current (ReplacingMergeTree collapses on (apex,type,response))."""
     return f"""
-INSERT INTO dabi.dns_current (apex, query_type, response, ttl, source, first_seen, last_seen)
+INSERT INTO dabi.dns_current (apex, query_type, response, ttl, source, last_seen)
 SELECT
     apex, query_type, response,
     any(ttl) AS ttl,
     any(source) AS source,
-    min(observed_date) AS first_seen,
     max(observed_date) AS last_seen
 FROM dabi.dns_records
 WHERE observed_date = toDate('{date}')
 GROUP BY apex, query_type, response
 """
+
+
+def build_delete_source_day_sql(source: str, date: str) -> str:
+    """Idempotency: clear any prior rows for this (source, date) before re-loading.
+
+    dns_records is a plain MergeTree (append), so without this a re-run / mid-batch
+    resume would duplicate rows. Lightweight DELETE excludes the rows immediately.
+    """
+    return f"DELETE FROM dabi.dns_records WHERE source = '{source}' AND observed_date = toDate('{date}')"
 
 
 # ── OpenSearch enrichment ─────────────────────────────────────────────────────
@@ -224,6 +235,9 @@ def build_enrich_doc(apex: str, rows: list[tuple[str, str]], snapshot_date: str)
             mx.append(resp)
         elif qtype in ("DS", "DNSKEY"):
             has_dnssec = True
+    # OpenINTEL measures the same record from multiple query-name variants (apex + www,
+    # multiple vantage points) → dedupe to clean, stable infra lists for investigators.
+    a, aaaa, ns, mx = sorted(set(a)), sorted(set(aaaa)), sorted(set(ns)), sorted(set(mx))
     ns_apex = _registered_apex(ns[0]) if ns else ""
     return {
         "a_records": a,
@@ -264,17 +278,24 @@ def enrich_opensearch(os_client, ch, date: str, log_, limit: int | None = None) 
     def _actions():
         for apex, grp in itertools.groupby(result.result_rows, key=lambda r: r[0]):
             rows = [(r[1], r[2]) for r in grp]
+            # Route to the per-TLD alias (single-index, writable). The global
+            # `dabi-domains` alias spans many indices and cannot be an update target.
+            tld = apex.rsplit(".", 1)[-1]
             yield {
                 "_op_type": "update",
-                "_index": "dabi-domains",
+                "_index": f"domains-{tld}",
                 "_id": apex,
                 "doc": build_enrich_doc(apex, rows, date),
             }
 
     updated = 0
     for ok, _info in parallel_bulk(
-        os_client, _actions(), chunk_size=5000, thread_count=8,
-        request_timeout=120, raise_on_error=False,
+        os_client,
+        _actions(),
+        chunk_size=5000,
+        thread_count=8,
+        request_timeout=120,
+        raise_on_error=False,
     ):
         if ok:
             updated += 1
@@ -294,15 +315,29 @@ def _default_partition_date() -> str:
 
 
 def add_fdns_args(parser: argparse.ArgumentParser, default_sources: list[str]) -> None:
-    parser.add_argument("--partition-date", default=_default_partition_date(),
-                        help="Snapshot date YYYY-MM-DD. Default: yesterday UTC.")
-    parser.add_argument("--sources", nargs="+", default=None, metavar="SRC",
-                        help=f"Sources to ingest. Default: auto-discover (fallback {default_sources}).")
+    parser.add_argument(
+        "--partition-date",
+        default=_default_partition_date(),
+        help="Snapshot date YYYY-MM-DD. Default: yesterday UTC.",
+    )
+    parser.add_argument(
+        "--sources",
+        nargs="+",
+        default=None,
+        metavar="SRC",
+        help=f"Sources to ingest. Default: auto-discover (fallback {default_sources}).",
+    )
     parser.add_argument("--look-back", type=int, default=7, metavar="DAYS")
-    parser.add_argument("--disk-max-pct", type=int, default=85, metavar="PCT",
-                        help="Abort if the ClickHouse scratch disk exceeds this %% used.")
-    parser.add_argument("--enrich-limit", type=int, default=None, metavar="N",
-                        help="Cap OS enrichment rows (debug).")
+    parser.add_argument(
+        "--disk-max-pct",
+        type=int,
+        default=85,
+        metavar="PCT",
+        help="Abort if the ClickHouse scratch disk exceeds this %% used.",
+    )
+    parser.add_argument(
+        "--enrich-limit", type=int, default=None, metavar="N", help="Cap OS enrichment rows (debug)."
+    )
     parser.add_argument("--skip-opensearch", action="store_true")
     parser.add_argument("--force", action="store_true")
 
@@ -310,9 +345,7 @@ def add_fdns_args(parser: argparse.ArgumentParser, default_sources: list[str]) -
 def _scratch_pct(ch) -> int:
     """Percent used of the ClickHouse `scratch` disk (queried from CH, not the local FS —
     the ingest container does not mount /mnt/scratch; only the analytics container does)."""
-    rows = ch.query(
-        "SELECT total_space, free_space FROM system.disks WHERE name = 'scratch'"
-    ).result_rows
+    rows = ch.query("SELECT total_space, free_space FROM system.disks WHERE name = 'scratch'").result_rows
     if not rows or not rows[0][0]:
         return 0
     total, free = rows[0]
@@ -349,6 +382,8 @@ def run_fdns(basis: str, default_sources: list[str], args: argparse.Namespace) -
                 continue
             parts, data_date = found
             slog.info("download.start", parts=len(parts), data_date=data_date.isoformat())
+            # idempotent: drop any prior rows for this (source, date) first
+            ch.command(build_delete_source_day_sql(source, date))
             for part_url in parts:
                 ch.command(build_insert_sql(part_url, basis, source, date))
             mid = _scratch_pct(ch)

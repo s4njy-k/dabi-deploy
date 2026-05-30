@@ -7,7 +7,9 @@ import argparse
 from dabi_ingest.pipelines import _fdns_common as fc
 
 PIPELINE = "openintel-toplist"
-DESCRIPTION = "OpenINTEL forward-DNS top-lists — resolved records for alexa/crux/majestic/radar/tranco/umbrella."
+DESCRIPTION = (
+    "OpenINTEL forward-DNS top-lists — resolved records for alexa/crux/majestic/radar/tranco/umbrella."
+)
 
 DEFAULT_SOURCES = ["alexa", "crux", "majestic", "radar", "tranco", "umbrella"]
 

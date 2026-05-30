@@ -8,6 +8,15 @@ def test_ddl_records_targets_scratch_and_partitions_monthly():
     assert "PARTITION BY toYYYYMM(observed_date)" in ddl
     assert "ORDER BY (apex, query_type, response)" in ddl
     assert "TTL observed_date + INTERVAL" in ddl
+    # idempotent DELETE must be allowed despite the reverse-pivot projection
+    assert "lightweight_mutation_projection_mode = 'rebuild'" in ddl
+
+
+def test_delete_source_day_sql_scopes_to_source_and_date():
+    sql = fc.build_delete_source_day_sql("li", "2026-05-29")
+    assert sql == (
+        "DELETE FROM dabi.dns_records WHERE source = 'li' AND observed_date = toDate('2026-05-29')"
+    )
 
 
 def test_ddl_projection_orders_by_response_for_reverse_pivots():
@@ -23,9 +32,11 @@ def test_ddl_current_is_replacing_mergetree():
 
 
 def test_parse_sources_from_listing_html():
-    html = '<a href="/download/forward-dns/basis=toplist/source=tranco">x</a>' \
-           '<a href="/download/forward-dns/basis=toplist/source=umbrella">y</a>' \
-           '<a href="/download/forward-dns/basis=toplist">parent</a>'
+    html = (
+        '<a href="/download/forward-dns/basis=toplist/source=tranco">x</a>'
+        '<a href="/download/forward-dns/basis=toplist/source=umbrella">y</a>'
+        '<a href="/download/forward-dns/basis=toplist">parent</a>'
+    )
     assert fc.parse_sources(html) == ["tranco", "umbrella"]
 
 
@@ -45,15 +56,14 @@ def test_parse_parts_from_leaf_html_keeps_only_object_parquet():
 def test_listing_url_for_builds_encoded_path():
     url = fc.listing_url_for("zonefile", "li", 2026, 5, 29)
     assert url == (
-        "https://openintel.nl/download/forward-dns/basis=zonefile/source=li/"
-        "year%3D2026/month%3D05/day%3D29/"
+        "https://openintel.nl/download/forward-dns/basis=zonefile/source=li/year%3D2026/month%3D05/day%3D29/"
     )
 
 
 def test_build_insert_sql_maps_value_columns_and_filters():
     sql = fc.build_insert_sql(
         part_url="https://object.openintel.nl/openintel-public/fdns/basis=zonefile/"
-                 "source=li/year=2026/month=05/day=29/part-x.gz.parquet",
+        "source=li/year=2026/month=05/day=29/part-x.gz.parquet",
         basis="zonefile",
         source="li",
         date="2026-05-29",
@@ -114,7 +124,7 @@ def test_add_fdns_args_sets_expected_defaults():
     p = argparse.ArgumentParser()
     fc.add_fdns_args(p, default_sources=["li", "se"])
     ns = p.parse_args([])
-    assert ns.sources is None              # None => auto-discover
+    assert ns.sources is None  # None => auto-discover
     assert ns.look_back == 7
     assert ns.disk_max_pct == 85
     assert ns.skip_opensearch is False
