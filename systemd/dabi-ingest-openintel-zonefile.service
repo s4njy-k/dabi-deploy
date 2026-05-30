@@ -1,0 +1,14 @@
+[Unit]
+Description=DABI OpenINTEL forward-DNS zone-based daily ingest
+After=network-online.target docker.service
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/dabi/deploy
+ExecStart=/srv/dabi/deploy/scripts/run-openintel-zonefile-pipeline.sh
+TimeoutStartSec=120min
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=5

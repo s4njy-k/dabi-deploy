@@ -152,7 +152,10 @@ DABI is split across two repositories. Both are owned by GitHub user `s4njy-k`.
     ├── dabi-ingest-dns.{service,timer}
     ├── dabi-ingest-rdns.{service,timer}
     ├── dabi-ingest-ctlog.{service,timer}
-    └── dabi-ingest-rir.{service,timer}
+    ├── dabi-ingest-rir.{service,timer}
+    ├── dabi-ingest-openintel-cctld.{service,timer}
+    ├── dabi-ingest-openintel-toplist.{service,timer}
+    └── dabi-ingest-openintel-zonefile.{service,timer}
 ```
 
 ### `s4njy-k/domain-search-pro` — application + ingest code
@@ -369,6 +372,8 @@ blocked by PEP 668 on modern Ubuntu.
 | 02:50 | `dabi-ingest-rdns.timer`    | PTR lookup of A-record IPs → `dabi.rdns`                |
 | 03:00 | `dabi-ingest-ctlog.timer`   | Google Argon2026h1 CT log → `dabi.ct_fqdn_observations` |
 | 03:30 | `dabi-ingest-rir.timer`     | 5 RIRs delegated-extended → `dabi.rir_whois`            |
+| 04:30 | `dabi-ingest-openintel-toplist.timer`  | OpenINTEL resolved DNS for 6 top-lists → `dabi.dns_records` (+ OS enrich) |
+| 05:30 | `dabi-ingest-openintel-zonefile.timer` | OpenINTEL resolved DNS for 10 public zones → `dabi.dns_records` (+ OS enrich) |
 | hourly | `dabi-backup.timer`        | OS snapshot + CH backup + Redis + auth.db → GCS         |
 | Sun 04:00 | `dabi-cert-renew.timer` | certbot webroot renewal                                 |
 
@@ -392,6 +397,39 @@ multiple timers wake at the same instant.
 - **Output:** OpenSearch index `domains-<tld>-<yyyymmdd>` aliased to
   `domains-<tld>` and the global alias `dabi-domains`.
 - **Volume:** `.online` produces ~3.4M unique apex domains; `.xyz` similar.
+
+#### OpenINTEL forward-DNS (resolved DNS — the infrastructure-pivot layer)
+
+- **Source:** `https://object.openintel.nl/openintel-public/fdns/` — **public**, no
+  approval needed; a one-click CC BY-NC-SA 4.0 license acceptance
+  (`POST /download/terms/`) sets the cookie used to navigate the listing. Data files
+  are direct, unauthenticated Parquet downloads.
+- **Two pipelines** (`python -m dabi_ingest openintel-{toplist,zonefile}`):
+  - `openintel-toplist` — 6 ranked lists: `alexa crux majestic radar tranco umbrella`.
+  - `openintel-zonefile` — 10 public zones: `ch ee fr se sk li nu gov fed.us root`.
+  - Sources auto-discovered from the listing (explicit `--sources` overrides).
+- **Pipeline:** discover latest day's Parquet parts → ClickHouse reads each part
+  **server-side** via `url(<part>, Parquet)` (no pandas/pyarrow needed) → normalize
+  per `response_type` into `dabi.dns_records` → roll latest state into
+  `dabi.dns_current` → enrich OpenSearch domain docs. Idempotent per `(source, date)`
+  (delete-before-insert). DiskGuard aborts above `--disk-max-pct` (default 85).
+- **ClickHouse tables** (on the 2 TB `scratch` storage policy):
+  - `dabi.dns_records` — append history: `(apex, query_name, query_type, response,
+    ttl, country, asn, asn_name, ip_prefix, basis, source, observed_date)`. Ordered
+    by `(apex, query_type, response)` **plus a `proj_by_response` projection** ordered
+    by `(response, query_type, apex)` so IP→domain / NS→domain / MX→domain reverse
+    pivots are index-fast. `TTL observed_date + 180d` (tunable via `DABI_DNS_RETAIN_DAYS`).
+  - `dabi.dns_current` — `ReplacingMergeTree` latest-state cache.
+- **OpenSearch enrichment:** fills `a_records`, `aaaa_records`, `nameservers`,
+  `ns_apex`, `mx_records`, `has_dnssec`, `record_count` on existing `domains-<tld>`
+  docs (routed to the per-TLD alias, which is single-index/writable; the global
+  `dabi-domains` alias is multi-index and cannot be an update target). Arrays are
+  deduped. Domains not already in the name corpus are skipped (no doc creation).
+- **Attribution:** OpenINTEL is a joint project of the University of Twente, SIDN,
+  NLnet Labs, and SURF, licensed CC BY-NC-SA 4.0. Attribution is surfaced in the UI
+  footer and `nginx` headers.
+- **Volume (per day):** e.g. `.se` ≈ 17.4M response rows (~40 MB compressed) enriching
+  ~1.05M `.se` domains; `.li` ≈ 690K rows.
 
 #### Tranco top-1M
 

@@ -2,10 +2,10 @@
 Description=DABI OpenINTEL toplist forward-DNS ingest
 
 [Timer]
-OnCalendar=*-*-* 21:00:00 UTC
+OnCalendar=*-*-* 04:30:00 UTC
 Persistent=true
 RandomizedDelaySec=300
-Unit=dabi-ingest@openintel-toplist.service
+Unit=dabi-ingest-openintel-toplist.service
 
 [Install]
 WantedBy=timers.target
