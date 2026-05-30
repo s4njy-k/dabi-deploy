@@ -138,3 +138,67 @@ def discover_parts(
         except requests.RequestException:
             continue
     return None
+
+
+# ── Load SQL (ClickHouse reads Parquet server-side via url()) ─────────────────
+
+_TYPES_SQL = "(" + ",".join(f"'{t}'" for t in RECORD_TYPES) + ")"
+
+
+def build_insert_sql(part_url: str, basis: str, source: str, date: str) -> str:
+    """INSERT … SELECT that reads one OpenINTEL Parquet part server-side and normalizes it.
+
+    response is the type-appropriate value column; host-valued columns have their trailing
+    dot stripped. DS/DNSKEY rows carry a key-tag/algorithm marker so has_dnssec can be derived.
+    `as` is back-quoted (ClickHouse keyword).
+    """
+    return f"""
+INSERT INTO dabi.dns_records
+    (apex, query_name, query_type, response, ttl, country, asn, asn_name, ip_prefix, basis, source, observed_date)
+WITH trimRight(query_name, '.') AS qn
+SELECT
+    cutToFirstSignificantSubdomain(qn) AS apex,
+    qn AS query_name,
+    response_type AS query_type,
+    multiIf(
+        response_type = 'A',      ifNull(ip4_address, ''),
+        response_type = 'AAAA',   ifNull(ip6_address, ''),
+        response_type = 'NS',     trimRight(ifNull(ns_address, ''), '.'),
+        response_type = 'MX',     trimRight(ifNull(mx_address, ''), '.'),
+        response_type = 'CNAME',  trimRight(ifNull(cname_name, ''), '.'),
+        response_type = 'DNAME',  trimRight(ifNull(dname_name, ''), '.'),
+        response_type = 'TXT',    ifNull(txt_text, ''),
+        response_type = 'SOA',    trimRight(ifNull(soa_mname, ''), '.'),
+        response_type = 'DS',     toString(ifNull(ds_key_tag, 0)),
+        response_type = 'DNSKEY', toString(ifNull(dnskey_algorithm, 0)),
+        ''
+    ) AS response,
+    toUInt32(ifNull(response_ttl, 0)) AS ttl,
+    ifNull(country, '') AS country,
+    toUInt32OrZero(ifNull(`as`, '')) AS asn,
+    ifNull(as_full, '') AS asn_name,
+    ifNull(ip_prefix, '') AS ip_prefix,
+    '{basis}' AS basis,
+    '{source}' AS source,
+    toDate('{date}') AS observed_date
+FROM url('{part_url}', Parquet)
+WHERE response_type IN {_TYPES_SQL}
+  AND response != ''
+SETTINGS max_http_get_redirects = 5
+"""
+
+
+def build_current_upsert_sql(date: str) -> str:
+    """Roll the day's rows into dns_current (ReplacingMergeTree collapses on (apex,type,response))."""
+    return f"""
+INSERT INTO dabi.dns_current (apex, query_type, response, ttl, source, first_seen, last_seen)
+SELECT
+    apex, query_type, response,
+    any(ttl) AS ttl,
+    any(source) AS source,
+    min(observed_date) AS first_seen,
+    max(observed_date) AS last_seen
+FROM dabi.dns_records
+WHERE observed_date = toDate('{date}')
+GROUP BY apex, query_type, response
+"""
