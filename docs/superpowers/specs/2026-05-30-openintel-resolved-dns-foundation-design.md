@@ -87,24 +87,35 @@ OpenSearch disk uncrowded.
 
 ## 4. Data Model (ClickHouse)
 
-Column mapping is finalized in implementation step 0 by inspecting the actual OpenINTEL
-parquet schema with DuckDB (`DESCRIBE SELECT * FROM read_parquet('<url>')`). The OpenINTEL
-forward-DNS schema is known to carry per-response rows with fields including
-`query_name`, `query_type`, `response_type`, `ip4_address`, `ip6_address`,
-`ns_address`, `mx_address`, `txt_text`, `cname_name`, `ttl`, `response_name`. The load
-SELECT normalizes whichever value column matches `response_type` into a single
-`response String`.
+Column mapping is **finalized** (verified 2026-05-30 via `DESCRIBE url('<li parquet>', Parquet)`
+against the real OpenINTEL forward-DNS schema). The parquet carries one row per DNS
+response with columns including `query_name`, `query_type`, `response_type`,
+`response_name`, `response_ttl`, `ip4_address`, `ip6_address`, `country`, `as`,
+`as_full`, `ip_prefix`, `cname_name`, `dname_name`, `mx_address`, `mx_preference`,
+`ns_address`, `txt_text`, `soa_mname`, `ds_key_tag`, `dnskey_algorithm` (plus RRSIG/NSEC/
+CDS/CDNSKEY detail we don't ingest). Two facts that shape the load:
+- `query_name` is FQDN-with-trailing-dot (`coinstrader24.li.`); strip the dot and derive
+  apex with `cutToFirstSignificantSubdomain()` (ClickHouse built-in PSL).
+- A/AAAA rows ship **pre-resolved IP attribution** (`country`, `as`=ASN, `as_full`=org,
+  `ip_prefix`) — we keep these for free domain→IP→ASN→country pivots.
+
+The load SELECT normalizes the value column matching `response_type` into a single
+`response String` (see §5.1).
 
 ```sql
 CREATE TABLE IF NOT EXISTS dabi.dns_records
 (
-    apex          String,                       -- registered apex of query_name
-    query_name    String,                       -- full queried name
-    query_type    LowCardinality(String),       -- A, AAAA, NS, MX, TXT, SOA, DNSKEY, DS, CAA, TLSA, CNAME
-    response      String,                        -- normalized value (IP / host / text)
+    apex          String,                       -- cutToFirstSignificantSubdomain(query_name)
+    query_name    String,                       -- full queried name, trailing dot stripped
+    query_type    LowCardinality(String),       -- = response_type: A,AAAA,NS,MX,CNAME,DNAME,TXT,SOA,DS,DNSKEY
+    response      String,                        -- normalized value (IP / host / text / key-tag)
     ttl           UInt32,
+    country       LowCardinality(String),        -- IP geo (A/AAAA), '' otherwise
+    asn           UInt32,                         -- 0 if none
+    asn_name      String,                         -- '' if none
+    ip_prefix     String,                         -- '' if none
     basis         LowCardinality(String),        -- toplist | zonefile
-    source        LowCardinality(String),        -- tranco, se, ch, ...
+    source        LowCardinality(String),        -- tranco, se, ch, li, ...
     observed_date Date
 )
 ENGINE = MergeTree
