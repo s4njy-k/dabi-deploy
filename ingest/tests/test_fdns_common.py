@@ -106,3 +106,19 @@ def test_enrich_doc_no_dnssec_when_absent():
     assert doc["has_dnssec"] is False
     assert doc["nameservers"] == []
     assert doc["ns_apex"] == ""
+
+
+def test_add_fdns_args_sets_expected_defaults():
+    import argparse
+
+    p = argparse.ArgumentParser()
+    fc.add_fdns_args(p, default_sources=["li", "se"])
+    ns = p.parse_args([])
+    assert ns.sources is None              # None => auto-discover
+    assert ns.look_back == 7
+    assert ns.disk_max_pct == 85
+    assert ns.skip_opensearch is False
+    assert ns.force is False
+    ns2 = p.parse_args(["--sources", "li", "--skip-opensearch"])
+    assert ns2.sources == ["li"]
+    assert ns2.skip_opensearch is True

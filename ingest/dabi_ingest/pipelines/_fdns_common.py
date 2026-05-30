@@ -280,3 +280,93 @@ def enrich_opensearch(os_client, ch, date: str, log_, limit: int | None = None) 
             updated += 1
     log_.info("enrich.done", updated=updated)
     return updated
+
+
+# ── Orchestrator ──────────────────────────────────────────────────────────────
+
+import argparse  # noqa: E402
+
+from dabi_ingest import checkpoint, clients  # noqa: E402
+
+
+def _default_partition_date() -> str:
+    return (datetime.datetime.now(datetime.UTC).date() - datetime.timedelta(days=1)).isoformat()
+
+
+def add_fdns_args(parser: argparse.ArgumentParser, default_sources: list[str]) -> None:
+    parser.add_argument("--partition-date", default=_default_partition_date(),
+                        help="Snapshot date YYYY-MM-DD. Default: yesterday UTC.")
+    parser.add_argument("--sources", nargs="+", default=None, metavar="SRC",
+                        help=f"Sources to ingest. Default: auto-discover (fallback {default_sources}).")
+    parser.add_argument("--look-back", type=int, default=7, metavar="DAYS")
+    parser.add_argument("--disk-max-pct", type=int, default=85, metavar="PCT",
+                        help="Abort if the ClickHouse scratch disk exceeds this %% used.")
+    parser.add_argument("--enrich-limit", type=int, default=None, metavar="N",
+                        help="Cap OS enrichment rows (debug).")
+    parser.add_argument("--skip-opensearch", action="store_true")
+    parser.add_argument("--force", action="store_true")
+
+
+def _scratch_pct(ch) -> int:
+    """Percent used of the ClickHouse `scratch` disk (queried from CH, not the local FS —
+    the ingest container does not mount /mnt/scratch; only the analytics container does)."""
+    rows = ch.query(
+        "SELECT total_space, free_space FROM system.disks WHERE name = 'scratch'"
+    ).result_rows
+    if not rows or not rows[0][0]:
+        return 0
+    total, free = rows[0]
+    return round((total - free) / total * 100)
+
+
+def run_fdns(basis: str, default_sources: list[str], args: argparse.Namespace) -> int:
+    date = args.partition_date
+    target = datetime.date.fromisoformat(date)
+    log_ = log.bind(basis=basis, partition_date=date)
+
+    if not args.force and checkpoint.is_done(f"openintel-{basis}", date):
+        log_.info("checkpoint.skip", reason="already done")
+        return 0
+
+    ch = clients.clickhouse()
+    ensure_schema(ch)
+
+    pct = _scratch_pct(ch)
+    if pct >= args.disk_max_pct:
+        log_.error("diskguard.abort", scratch_pct=pct, limit=args.disk_max_pct)
+        return 1
+
+    sess = make_session()
+    sources = args.sources or discover_sources(sess, basis) or default_sources
+    log_.info("sources.resolved", sources=sources)
+
+    with checkpoint.run(f"openintel-{basis}", date) as cp:
+        for source in sources:
+            slog = log_.bind(source=source)
+            found = discover_parts(sess, basis, source, target, args.look_back)
+            if not found:
+                slog.warning("no_data", look_back=args.look_back)
+                continue
+            parts, data_date = found
+            slog.info("download.start", parts=len(parts), data_date=data_date.isoformat())
+            for part_url in parts:
+                ch.command(build_insert_sql(part_url, basis, source, date))
+            mid = _scratch_pct(ch)
+            if mid >= args.disk_max_pct:
+                slog.error("diskguard.abort_mid_batch", scratch_pct=mid)
+                return 1
+        # roll current-state once for the whole day
+        ch.command(build_current_upsert_sql(date))
+        total = ch.query(
+            "SELECT count() FROM dabi.dns_records "
+            "WHERE observed_date = toDate({d:String}) AND basis = {b:String}",
+            parameters={"d": date, "b": basis},
+        ).result_rows[0][0]
+        cp.set_rows(total)
+        log_.info("load.done", rows=total)
+
+        if not args.skip_opensearch:
+            os_client = clients.opensearch()
+            enrich_opensearch(os_client, ch, date, log_, limit=args.enrich_limit)
+
+    return 0
