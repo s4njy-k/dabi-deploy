@@ -202,3 +202,81 @@ FROM dabi.dns_records
 WHERE observed_date = toDate('{date}')
 GROUP BY apex, query_type, response
 """
+
+
+# ── OpenSearch enrichment ─────────────────────────────────────────────────────
+
+from opensearchpy.helpers import parallel_bulk  # noqa: E402
+
+
+def build_enrich_doc(apex: str, rows: list[tuple[str, str]], snapshot_date: str) -> dict:
+    """Group (query_type, response) rows for one apex into the OS partial-update source."""
+    a, aaaa, ns, mx = [], [], [], []
+    has_dnssec = False
+    for qtype, resp in rows:
+        if qtype == "A":
+            a.append(resp)
+        elif qtype == "AAAA":
+            aaaa.append(resp)
+        elif qtype == "NS":
+            ns.append(resp)
+        elif qtype == "MX":
+            mx.append(resp)
+        elif qtype in ("DS", "DNSKEY"):
+            has_dnssec = True
+    ns_apex = _registered_apex(ns[0]) if ns else ""
+    return {
+        "a_records": a,
+        "aaaa_records": aaaa,
+        "nameservers": ns,
+        "mx_records": mx,
+        "ns_apex": ns_apex,
+        "has_dnssec": has_dnssec,
+        "record_count": len(rows),
+        "snapshot_date": snapshot_date,
+    }
+
+
+def _registered_apex(host: str) -> str:
+    """Last two labels (sufficient for the single-/two-label NS hosts OpenINTEL returns)."""
+    labels = host.strip(".").split(".")
+    return ".".join(labels[-2:]) if len(labels) >= 2 else host
+
+
+def enrich_opensearch(os_client, ch, date: str, log_, limit: int | None = None) -> int:
+    """Push the day's dns_current state into existing OS domain docs (partial updates).
+
+    Only apexes already present in OpenSearch are touched (no doc_as_upsert, so new domains
+    are not created here — name indexing is the cctld/czds pipelines' job).
+    """
+    import itertools
+
+    q = (
+        "SELECT apex, query_type, response FROM dabi.dns_records "
+        "WHERE observed_date = toDate({d:String}) "
+        "AND query_type IN ('A','AAAA','NS','MX','DS','DNSKEY') "
+        "ORDER BY apex"
+    )
+    if limit:
+        q += f" LIMIT {int(limit)}"
+    result = ch.query(q, parameters={"d": date})
+
+    def _actions():
+        for apex, grp in itertools.groupby(result.result_rows, key=lambda r: r[0]):
+            rows = [(r[1], r[2]) for r in grp]
+            yield {
+                "_op_type": "update",
+                "_index": "dabi-domains",
+                "_id": apex,
+                "doc": build_enrich_doc(apex, rows, date),
+            }
+
+    updated = 0
+    for ok, _info in parallel_bulk(
+        os_client, _actions(), chunk_size=5000, thread_count=8,
+        request_timeout=120, raise_on_error=False,
+    ):
+        if ok:
+            updated += 1
+    log_.info("enrich.done", updated=updated)
+    return updated

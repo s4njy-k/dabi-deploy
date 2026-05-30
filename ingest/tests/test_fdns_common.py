@@ -78,3 +78,31 @@ def test_build_current_upsert_sql_uses_date_and_min_first_seen():
     assert "FROM dabi.dns_records" in sql
     assert "observed_date = toDate('2026-05-29')" in sql
     assert "GROUP BY apex, query_type, response" in sql
+
+
+def test_enrich_doc_groups_records_into_os_fields():
+    rows = [
+        ("A", "64.190.63.222"),
+        ("A", "64.190.63.223"),
+        ("AAAA", "2001:db8::1"),
+        ("NS", "ns1.sedoparking.com"),
+        ("NS", "ns2.sedoparking.com"),
+        ("MX", "mail.example.li"),
+        ("DNSKEY", "8"),
+    ]
+    doc = fc.build_enrich_doc("coinstrader24.li", rows, "2026-05-29")
+    assert sorted(doc["a_records"]) == ["64.190.63.222", "64.190.63.223"]
+    assert doc["aaaa_records"] == ["2001:db8::1"]
+    assert sorted(doc["nameservers"]) == ["ns1.sedoparking.com", "ns2.sedoparking.com"]
+    assert doc["ns_apex"] == "sedoparking.com"
+    assert doc["has_dnssec"] is True
+    assert doc["mx_records"] == ["mail.example.li"]
+    assert doc["record_count"] == 7
+    assert doc["snapshot_date"] == "2026-05-29"
+
+
+def test_enrich_doc_no_dnssec_when_absent():
+    doc = fc.build_enrich_doc("x.li", [("A", "1.2.3.4")], "2026-05-29")
+    assert doc["has_dnssec"] is False
+    assert doc["nameservers"] == []
+    assert doc["ns_apex"] == ""
