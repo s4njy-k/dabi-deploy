@@ -142,12 +142,18 @@ def run(args: argparse.Namespace) -> int:
 
 
 def _discover_available_tlds(target: datetime.date, look_back: int) -> list[str]:
-    """Scrape OpenINTEL listing page for all ccTLDs, then probe which have recent data."""
+    """Discover all ccTLDs with data by navigating the OpenINTEL website hierarchy.
+
+    Uses the website's month→day directory listing to find which TLDs have files,
+    then verifies the object.openintel.nl URL is reachable. This is reliable and
+    avoids rate-limiting from parallel brute-force HEAD probes.
+    """
+    import concurrent.futures as _cf
     import re as _re
 
     log.info("discover.start", listing=_LISTING_URL)
 
-    # Accept terms (sets cookie) then fetch the listing
+    # Step 1: get the full TLD list from the main listing page
     sess = requests.Session()
     try:
         sess.post(_TERMS_URL, params={"redirect_uri": "/download/domain-lists/cctlds/"}, timeout=20)
@@ -158,23 +164,42 @@ def _discover_available_tlds(target: datetime.date, look_back: int) -> list[str]
         return []
 
     listed = sorted(set(_re.findall(r"tld=([a-z]{2,6})", resp.text)))
+    # Filter out pseudo-entries like 'xn' (IDN prefix, not a real TLD)
+    listed = [t for t in listed if t != "xn"]
     log.info("discover.listed", count=len(listed))
 
-    # Probe each TLD in parallel for recent data availability.
-    # cap at 20 workers to avoid rate-limiting on object.openintel.nl.
-    import concurrent.futures as _cf
-
-    def _probe(tld: str) -> tuple[str, bool]:
-        return tld, _find_url(tld, target, look_back, log) is not None
+    # Step 2: for each TLD, navigate month→day to find the latest published file.
+    # Uses 8 workers — enough to be fast but won't trigger rate limits.
+    def _probe_via_website(tld: str) -> tuple[str, bool]:
+        """Check if a TLD has data by navigating the website hierarchy."""
+        year = target.year
+        month = target.month
+        # Walk back through months until we find a day listing
+        for _ in range(3):  # check up to 3 months back
+            month_path = f"/download/domain-lists/cctlds/tld%3D{tld}/year%3D{year}/month%3D{month:02d}/"
+            try:
+                r = sess.get(f"https://openintel.nl{month_path}", timeout=15)
+                days = sorted(set(_re.findall(r"day=(\d+)", r.text)), key=int, reverse=True)
+                if days:
+                    # Found a day listing — file exists for this TLD
+                    return tld, True
+            except requests.RequestException:
+                pass
+            # Step back one month
+            month -= 1
+            if month == 0:
+                month = 12
+                year -= 1
+        return tld, False
 
     available = []
-    with _cf.ThreadPoolExecutor(max_workers=20) as ex:
-        for tld, ok in ex.map(_probe, listed):
+    with _cf.ThreadPoolExecutor(max_workers=8) as ex:
+        for tld, ok in ex.map(_probe_via_website, listed):
             if ok:
                 available.append(tld)
 
     available.sort()
-    log.info("discover.available", count=len(available), tlds=available)
+    log.info("discover.available", count=len(available))
     return available
 
 
