@@ -80,3 +80,61 @@ def ensure_schema(ch) -> None:
     ch.command(DDL_PROJECTION)
     ch.command(DDL_CURRENT)
     log.info("schema.ensured")
+
+
+# ── Discovery ───────────────────────────────────────────────────────────────
+
+import datetime  # noqa: E402
+import re  # noqa: E402
+
+import requests  # noqa: E402
+
+_PART_RE = re.compile(r'https://object\.openintel\.nl/openintel-public/fdns/[^"\'<> )]+\.parquet')
+
+
+def parse_sources(html: str) -> list[str]:
+    """Source names linked on a basis listing page (deduped, sorted)."""
+    found = re.findall(r'source=([a-z0-9.\-]+)"', html)
+    return sorted(set(found))
+
+
+def parse_parts(html: str) -> list[str]:
+    """Direct object.openintel.nl Parquet URLs on a leaf (day) page."""
+    return sorted(set(_PART_RE.findall(html)))
+
+
+def listing_url_for(basis: str, source: str, year: int, month: int, day: int) -> str:
+    """Website listing URL for a given day (path segments are %3D-encoded, per OpenINTEL)."""
+    return (
+        f"{LISTING_BASE}/basis={basis}/source={source}/"
+        f"year%3D{year:04d}/month%3D{month:02d}/day%3D{day:02d}/"
+    )
+
+
+def make_session() -> requests.Session:
+    """Session with the CC BY-NC-SA terms cookie accepted (required before listing pages)."""
+    sess = requests.Session()
+    sess.post(TERMS_URL, params={"redirect_uri": "/download/forward-dns/"}, timeout=20)
+    return sess
+
+
+def discover_sources(sess: requests.Session, basis: str) -> list[str]:
+    resp = sess.get(f"{LISTING_BASE}/basis={basis}/", timeout=20)
+    resp.raise_for_status()
+    return parse_sources(resp.text)
+
+
+def discover_parts(
+    sess: requests.Session, basis: str, source: str, target: datetime.date, look_back: int
+) -> tuple[list[str], datetime.date] | None:
+    """Walk back up to look_back days; return (part_urls, data_date) for the newest day with files."""
+    for offset in range(look_back):
+        d = target - datetime.timedelta(days=offset)
+        try:
+            r = sess.get(listing_url_for(basis, source, d.year, d.month, d.day), timeout=20)
+            parts = parse_parts(r.text)
+            if parts:
+                return parts, d
+        except requests.RequestException:
+            continue
+    return None
