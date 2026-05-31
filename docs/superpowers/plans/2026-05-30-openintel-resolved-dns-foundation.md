@@ -1,5 +1,15 @@
 # OpenINTEL Resolved-DNS Foundation — Implementation Plan
 
+> **✅ STATUS: SHIPPED & DEPLOYED (2026-05-31).** All 8 tasks complete; merged to
+> `main` via **PR #20** (squash `6c833fb`). Task 7 live `.li` smoke passed (17.4M
+> records loaded, ~1.05M OpenSearch docs enriched, IP/NS reverse pivots verified).
+> Final pre-merge refinement: OpenSearch enrichment groups per-apex **server-side
+> in ClickHouse** (`arrayDistinct(groupArrayIf(...))` + `basis` filter +
+> `query_row_block_stream`) to bound ingest-container memory on large zones.
+> Downstream app integration shipped separately in domain-search-pro **PR #86**
+> (IP co-host pivot → `dns_records`, MX surfaced, NS-set cohort). Checkboxes below
+> ticked to reflect completion.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement the `openintel-toplist` + `openintel-zonefile` ingest pipelines to land OpenINTEL resolved DNS (A/AAAA/NS/MX/CNAME/TXT/SOA + DNSSEC presence, with IP→ASN→country attribution) into ClickHouse on the 2 TB scratch disk, and enrich OpenSearch domain docs with live infrastructure fields.
@@ -43,7 +53,7 @@
 - Create: `config/clickhouse/config.d/storage.xml`
 - Modify: `docker-compose.yml` (`analytics` service `volumes:`)
 
-- [ ] **Step 1: Create the host directory for the scratch ClickHouse data**
+- [x] **Step 1: Create the host directory for the scratch ClickHouse data**
 
 Run (on VM):
 ```bash
@@ -52,7 +62,7 @@ sudo chown 101:101 /mnt/scratch/clickhouse   # clickhouse UID:GID per bootstrap 
 ```
 Expected: directory exists, owned by 101:101.
 
-- [ ] **Step 2: Write the storage policy config**
+- [x] **Step 2: Write the storage policy config**
 
 Create `config/clickhouse/config.d/storage.xml`:
 ```xml
@@ -76,7 +86,7 @@ Create `config/clickhouse/config.d/storage.xml`:
 </clickhouse>
 ```
 
-- [ ] **Step 3: Add the bind mount to the analytics service**
+- [x] **Step 3: Add the bind mount to the analytics service**
 
 In `docker-compose.yml`, under the `analytics` service `volumes:` list (alongside the existing `/srv/dabi/clickhouse:/var/lib/clickhouse` bind), add:
 ```yaml
@@ -84,7 +94,7 @@ In `docker-compose.yml`, under the `analytics` service `volumes:` list (alongsid
 ```
 (The `config.d` directory is already bind-mounted, so `storage.xml` is picked up automatically.)
 
-- [ ] **Step 4: Recreate analytics and verify the disk is registered**
+- [x] **Step 4: Recreate analytics and verify the disk is registered**
 
 Run (on VM):
 ```bash
@@ -94,7 +104,7 @@ docker exec dabi-analytics clickhouse-client -q "SELECT name, path, free_space>0
 ```
 Expected: rows include `default` AND `scratch  /var/lib/clickhouse-scratch/  1`. Existing data layer stays healthy (`docker compose ps` shows analytics healthy).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add config/clickhouse/config.d/storage.xml docker-compose.yml
@@ -109,7 +119,7 @@ git commit -m "feat(analytics): add scratch storage policy on 2TB disk for resol
 - Create: `ingest/dabi_ingest/pipelines/_fdns_common.py` (start the module)
 - Create: `ingest/tests/test_fdns_common.py`
 
-- [ ] **Step 1: Write the failing test for the DDL constants**
+- [x] **Step 1: Write the failing test for the DDL constants**
 
 Create `ingest/tests/test_fdns_common.py`:
 ```python
@@ -137,12 +147,12 @@ def test_ddl_current_is_replacing_mergetree():
     assert "storage_policy = 'scratch'" in ddl
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd ingest && /tmp/oi-venv/bin/python -m pytest tests/test_fdns_common.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'dabi_ingest.pipelines._fdns_common'`.
 
-- [ ] **Step 3: Write the module with DDL constants**
+- [x] **Step 3: Write the module with DDL constants**
 
 Create `ingest/dabi_ingest/pipelines/_fdns_common.py`:
 ```python
@@ -230,12 +240,12 @@ def ensure_schema(ch) -> None:
     log.info("schema.ensured")
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `cd ingest && /tmp/oi-venv/bin/python -m pytest tests/test_fdns_common.py -v`
 Expected: PASS (3 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ingest/dabi_ingest/pipelines/_fdns_common.py ingest/tests/test_fdns_common.py
@@ -250,7 +260,7 @@ git commit -m "feat(fdns): resolved-DNS ClickHouse schema (dns_records + project
 - Modify: `ingest/dabi_ingest/pipelines/_fdns_common.py`
 - Modify: `ingest/tests/test_fdns_common.py`
 
-- [ ] **Step 1: Write failing tests for the pure parsers**
+- [x] **Step 1: Write failing tests for the pure parsers**
 
 Append to `ingest/tests/test_fdns_common.py`:
 ```python
@@ -282,12 +292,12 @@ def test_listing_url_for_builds_encoded_path():
     )
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd ingest && /tmp/oi-venv/bin/python -m pytest tests/test_fdns_common.py -k "parse or listing_url" -v`
 Expected: FAIL — `AttributeError: module ... has no attribute 'parse_sources'`.
 
-- [ ] **Step 3: Implement the discovery helpers**
+- [x] **Step 3: Implement the discovery helpers**
 
 Append to `ingest/dabi_ingest/pipelines/_fdns_common.py`:
 ```python
@@ -348,12 +358,12 @@ def discover_parts(
     return None
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 Run: `cd ingest && /tmp/oi-venv/bin/python -m pytest tests/test_fdns_common.py -k "parse or listing_url" -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ingest/dabi_ingest/pipelines/_fdns_common.py ingest/tests/test_fdns_common.py
@@ -368,7 +378,7 @@ git commit -m "feat(fdns): OpenINTEL source/part discovery (terms cookie + listi
 - Modify: `ingest/dabi_ingest/pipelines/_fdns_common.py`
 - Modify: `ingest/tests/test_fdns_common.py`
 
-- [ ] **Step 1: Write failing tests for the SQL builders**
+- [x] **Step 1: Write failing tests for the SQL builders**
 
 Append to `ingest/tests/test_fdns_common.py`:
 ```python
@@ -402,12 +412,12 @@ def test_build_current_upsert_sql_uses_date_and_min_first_seen():
     assert "GROUP BY apex, query_type, response" in sql
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd ingest && /tmp/oi-venv/bin/python -m pytest tests/test_fdns_common.py -k "build_insert or build_current" -v`
 Expected: FAIL — `AttributeError: ... 'build_insert_sql'`.
 
-- [ ] **Step 3: Implement the SQL builders**
+- [x] **Step 3: Implement the SQL builders**
 
 Append to `ingest/dabi_ingest/pipelines/_fdns_common.py`:
 ```python
@@ -474,12 +484,12 @@ GROUP BY apex, query_type, response
 
 Note: `as` is a ClickHouse keyword, so it is back-quoted as `` `as` ``.
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 Run: `cd ingest && /tmp/oi-venv/bin/python -m pytest tests/test_fdns_common.py -k "build_insert or build_current" -v`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add ingest/dabi_ingest/pipelines/_fdns_common.py ingest/tests/test_fdns_common.py
@@ -494,7 +504,7 @@ git commit -m "feat(fdns): server-side Parquet load SQL + dns_current upsert bui
 - Modify: `ingest/dabi_ingest/pipelines/_fdns_common.py`
 - Modify: `ingest/tests/test_fdns_common.py`
 
-- [ ] **Step 1: Write failing test for the enrichment doc builder**
+- [x] **Step 1: Write failing test for the enrichment doc builder**
 
 Append to `ingest/tests/test_fdns_common.py`:
 ```python
@@ -527,12 +537,12 @@ def test_enrich_doc_no_dnssec_when_absent():
     assert doc["ns_apex"] == ""
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd ingest && /tmp/oi-venv/bin/python -m pytest tests/test_fdns_common.py -k enrich -v`
 Expected: FAIL — `AttributeError: ... 'build_enrich_doc'`.
 
-- [ ] **Step 3: Implement the enrichment builder + applier**
+- [x] **Step 3: Implement the enrichment builder + applier**
 
 Append to `ingest/dabi_ingest/pipelines/_fdns_common.py`:
 ```python
@@ -616,12 +626,12 @@ def enrich_opensearch(os_client, ch, date: str, log_, limit: int | None = None) 
 
 Note: `parallel_bulk` `update` against a missing `_id` returns a (benign) document-missing error and is counted as not-ok; that is the intended "don't create new docs" behavior.
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 Run: `cd ingest && /tmp/oi-venv/bin/python -m pytest tests/test_fdns_common.py -k enrich -v`
 Expected: PASS.
 
-- [ ] **Step 5: Add `mx_records` to the OpenSearch mapping (so enrichment field is typed)**
+- [x] **Step 5: Add `mx_records` to the OpenSearch mapping (so enrichment field is typed)**
 
 The cctld/czds mapping has `a_records`, `aaaa_records`, `nameservers`, `ns_apex`, `has_dnssec` but no `mx_records`. Because OpenSearch dynamic mapping would infer `keyword` anyway, this is safe, but make it explicit on the live cluster:
 ```bash
@@ -631,7 +641,7 @@ docker exec dabi-search curl -s -X PUT "http://localhost:9200/dabi-domains/_mapp
 ```
 Expected: `{"acknowledged":true}` (run after Task 8 indices exist; harmless to re-run).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add ingest/dabi_ingest/pipelines/_fdns_common.py ingest/tests/test_fdns_common.py
@@ -648,7 +658,7 @@ git commit -m "feat(fdns): OpenSearch infra enrichment (a/aaaa/ns/mx/ns_apex/has
 - Replace: `ingest/dabi_ingest/pipelines/openintel_zonefile.py`
 - Replace: `ingest/dabi_ingest/pipelines/openintel_toplist.py`
 
-- [ ] **Step 1: Write failing test for `add_fdns_args` defaults**
+- [x] **Step 1: Write failing test for `add_fdns_args` defaults**
 
 Append to `ingest/tests/test_fdns_common.py`:
 ```python
@@ -669,12 +679,12 @@ def test_add_fdns_args_sets_expected_defaults():
     assert ns2.skip_opensearch is True
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `cd ingest && /tmp/oi-venv/bin/python -m pytest tests/test_fdns_common.py -k add_fdns_args -v`
 Expected: FAIL — `AttributeError: ... 'add_fdns_args'`.
 
-- [ ] **Step 3: Implement `add_fdns_args` + `run_fdns`**
+- [x] **Step 3: Implement `add_fdns_args` + `run_fdns`**
 
 Append to `ingest/dabi_ingest/pipelines/_fdns_common.py`:
 ```python
@@ -767,12 +777,12 @@ def run_fdns(basis: str, default_sources: list[str], args: argparse.Namespace) -
     return 0
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 Run: `cd ingest && /tmp/oi-venv/bin/python -m pytest tests/test_fdns_common.py -k add_fdns_args -v`
 Expected: PASS.
 
-- [ ] **Step 5: Replace the zonefile stub with the wrapper**
+- [x] **Step 5: Replace the zonefile stub with the wrapper**
 
 Replace the entire contents of `ingest/dabi_ingest/pipelines/openintel_zonefile.py`:
 ```python
@@ -799,7 +809,7 @@ def run(args: argparse.Namespace) -> int:
     return fc.run_fdns("zonefile", DEFAULT_SOURCES, args)
 ```
 
-- [ ] **Step 6: Replace the toplist stub with the wrapper**
+- [x] **Step 6: Replace the toplist stub with the wrapper**
 
 Replace the entire contents of `ingest/dabi_ingest/pipelines/openintel_toplist.py`:
 ```python
@@ -825,17 +835,17 @@ def run(args: argparse.Namespace) -> int:
     return fc.run_fdns("toplist", DEFAULT_SOURCES, args)
 ```
 
-- [ ] **Step 7: Verify the dispatcher still imports every pipeline**
+- [x] **Step 7: Verify the dispatcher still imports every pipeline**
 
 Run: `cd ingest && /tmp/oi-venv/bin/python -c "from dabi_ingest.__main__ import _build_parser; _build_parser(); print('ok')"`
 Expected: prints `ok` (no ImportError; both modules expose `add_args`/`run`/`PIPELINE`).
 
-- [ ] **Step 8: Run the full unit suite**
+- [x] **Step 8: Run the full unit suite**
 
 Run: `cd ingest && /tmp/oi-venv/bin/python -m pytest tests/ -v`
 Expected: all PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add ingest/dabi_ingest/pipelines/_fdns_common.py ingest/dabi_ingest/pipelines/openintel_zonefile.py ingest/dabi_ingest/pipelines/openintel_toplist.py ingest/tests/test_fdns_common.py
@@ -848,7 +858,7 @@ git commit -m "feat(fdns): run_fdns orchestrator + openintel-zonefile/-toplist p
 
 **Files:** none (verification task on VM).
 
-- [ ] **Step 1: Build the local ingest image**
+- [x] **Step 1: Build the local ingest image**
 
 Run (on VM):
 ```bash
@@ -856,7 +866,7 @@ docker build -t dabi-ingest:local /srv/dabi/deploy/ingest/
 ```
 Expected: build succeeds (duckdb/clickhouse-connect wheels resolve on py3.14 ARM64 per requirements.txt).
 
-- [ ] **Step 2: Run zonefile for the single small `.li` source**
+- [x] **Step 2: Run zonefile for the single small `.li` source**
 
 The compose `ingest` service is the *domain-search-pro* image (`${INGEST_SHA}`), which does
 NOT contain these pipelines — so run the locally-built image directly with `docker run`,
@@ -874,7 +884,7 @@ docker run --rm \
 ```
 Expected: JSON logs end with `load.done` (rows > 0) then `enrich.done`. Exit 0.
 
-- [ ] **Step 3: Verify ClickHouse rows landed on the scratch disk**
+- [x] **Step 3: Verify ClickHouse rows landed on the scratch disk**
 
 Run:
 ```bash
@@ -888,7 +898,7 @@ FORMAT Vertical"
 ```
 Expected: `records` in the ~10^5–10^6 range, `current_li` > 0, `a_records` > 0, `distinct_asns` > 0.
 
-- [ ] **Step 4: Verify a reverse pivot works (IP → domains)**
+- [x] **Step 4: Verify a reverse pivot works (IP → domains)**
 
 Run:
 ```bash
@@ -900,7 +910,7 @@ GROUP BY response ORDER BY domains DESC LIMIT 5 FORMAT TabSeparated"
 ```
 Expected: a small table of shared-hosting IPs with their domain counts (proves the projection path / pivot capability).
 
-- [ ] **Step 5: Verify OpenSearch enrichment (only if a `.li` doc exists)**
+- [x] **Step 5: Verify OpenSearch enrichment (only if a `.li` doc exists)**
 
 Run:
 ```bash
@@ -910,7 +920,7 @@ docker exec dabi-search curl -s "http://localhost:9200/dabi-domains/_search" -H 
 ```
 Expected: if any `.li` doc exists in OS, it now shows non-empty `a_records`/`nameservers`. If `.li` is not in the name corpus, enrichment is a no-op (expected) — note this and rely on Step 3/4 as the smoke pass.
 
-- [ ] **Step 6: No commit** (verification only). If any step fails, fix the relevant Task 2–6 module before proceeding.
+- [x] **Step 6: No commit** (verification only). If any step fails, fix the relevant Task 2–6 module before proceeding.
 
 ---
 
@@ -921,7 +931,7 @@ Expected: if any `.li` doc exists in OS, it now shows non-empty `a_records`/`nam
 - Verify/fix: `systemd/dabi-ingest-openintel-toplist.{service,timer}`, `systemd/dabi-ingest-openintel-zonefile.{service,timer}`
 - Modify: `scripts/install-systemd.sh`, `README.md`
 
-- [ ] **Step 1: Write the two wrapper scripts**
+- [x] **Step 1: Write the two wrapper scripts**
 
 These mirror `scripts/run-openintel-cctld-pipeline.sh` exactly (network `deploy_dabi-net`,
 checkpoints `/srv/dabi/checkpoints`, secrets `/run/dabi/secrets`, sources `.env`).
@@ -955,7 +965,7 @@ Create `scripts/run-openintel-toplist-pipeline.sh` — identical except the echo
 final subcommand `openintel-toplist`.
 Then: `chmod +x scripts/run-openintel-*.sh`.
 
-- [ ] **Step 2: Ensure the dedicated service units call the wrappers**
+- [x] **Step 2: Ensure the dedicated service units call the wrappers**
 
 Confirm `systemd/dabi-ingest-openintel-zonefile.service` `ExecStart` is
 `/srv/dabi/deploy/scripts/run-openintel-zonefile-pipeline.sh` (Type=oneshot), and the
@@ -963,7 +973,7 @@ Confirm `systemd/dabi-ingest-openintel-zonefile.service` `ExecStart` is
 still use the generic `dabi-ingest@.service` template, replace with dedicated units
 modeled on `dabi-ingest-openintel-cctld.{service,timer}`.
 
-- [ ] **Step 3: Add both timers to install-systemd.sh PRODUCTION_TIMERS**
+- [x] **Step 3: Add both timers to install-systemd.sh PRODUCTION_TIMERS**
 
 In `scripts/install-systemd.sh`, add to the `PRODUCTION_TIMERS` array:
 ```bash
@@ -971,7 +981,7 @@ In `scripts/install-systemd.sh`, add to the `PRODUCTION_TIMERS` array:
   dabi-ingest-openintel-zonefile.timer
 ```
 
-- [ ] **Step 4: Install + enable the timers**
+- [x] **Step 4: Install + enable the timers**
 
 Run (on VM):
 ```bash
@@ -980,7 +990,7 @@ systemctl list-timers 'dabi-ingest-openintel-*' --all --no-pager
 ```
 Expected: `dabi-ingest-openintel-toplist.timer` and `-zonefile.timer` now `enabled` with NEXT times at 04:30 / 05:30 UTC.
 
-- [ ] **Step 5: Update CI trigger (already covers `ingest/**`)**
+- [x] **Step 5: Update CI trigger (already covers `ingest/**`)**
 
 Confirm `.github/workflows/ci-ingest.yml` triggers on `ingest/**` (it does). No change needed unless tests aren't run there — if the workflow only builds, add a step before build:
 ```yaml
@@ -990,7 +1000,7 @@ Confirm `.github/workflows/ci-ingest.yml` triggers on `ingest/**` (it does). No 
           cd ingest && python -m pytest tests/ -v
 ```
 
-- [ ] **Step 6: Update README + attribution**
+- [x] **Step 6: Update README + attribution**
 
 In `README.md`, under the ingest-pipelines section, add rows for `openintel-toplist`
 (daily 04:30 UTC, 6 toplists) and `openintel-zonefile` (daily 05:30 UTC, 10 public zones),
@@ -998,7 +1008,7 @@ their ClickHouse tables (`dabi.dns_records`, `dabi.dns_current`) and the env kno
 `DABI_DNS_RETAIN_DAYS`. Extend the OpenINTEL attribution note to mention the forward-DNS
 datasets (CC BY-NC-SA 4.0, Univ. of Twente / SIDN / NLnet Labs / SURF).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add scripts/run-openintel-toplist-pipeline.sh scripts/run-openintel-zonefile-pipeline.sh \
@@ -1008,7 +1018,7 @@ git add scripts/run-openintel-toplist-pipeline.sh scripts/run-openintel-zonefile
 git commit -m "feat(fdns): systemd timers + wrappers + CI tests + docs for openintel toplist/zonefile"
 ```
 
-- [ ] **Step 8: Push branch + open PR**
+- [x] **Step 8: Push branch + open PR**
 
 ```bash
 git push -u origin feat/openintel-resolved-dns

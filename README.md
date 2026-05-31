@@ -425,6 +425,15 @@ multiple timers wake at the same instant.
   docs (routed to the per-TLD alias, which is single-index/writable; the global
   `dabi-domains` alias is multi-index and cannot be an update target). Arrays are
   deduped. Domains not already in the name corpus are skipped (no doc creation).
+  Grouping is done **server-side in ClickHouse** (`arrayDistinct(groupArrayIf(...))`
+  filtered by `basis`, streamed via `query_row_block_stream`) so the step emits one
+  row per apex (~10⁷) instead of every record (~10⁸) — this bounds the ingest
+  container's memory on large zones. (PR #20, final commit.)
+- **Consumed by the app** (`s4njy-k/domain-search-pro`): `dabi.dns_records` backs
+  the IP→co-hosted-domains pivot (`/api/v1/intel/ip/{ip}/domains`, via
+  `proj_by_response`); the enriched OpenSearch fields back the domain-detail DNS
+  panel (incl. MX) and the NS-set/`ns_apex` cohort. See that repo's
+  `docs/opensearch.md` for the consumer contract. (Shipped: domain-search-pro #86.)
 - **Attribution:** OpenINTEL is a joint project of the University of Twente, SIDN,
   NLnet Labs, and SURF, licensed CC BY-NC-SA 4.0. Attribution is surfaced in the UI
   footer and `nginx` headers.
