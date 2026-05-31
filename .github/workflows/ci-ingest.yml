@@ -24,9 +24,22 @@ jobs:
       - run: ruff check ingest/
       - run: ruff format --check ingest/
 
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - run: pip install -r ingest/requirements.txt pytest
+      - name: pytest
+        working-directory: ingest
+        run: python -m pytest tests/ -v
+
   build-and-push:
     name: Build & push (linux/arm64)
-    needs: lint
+    needs: [lint, test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

@@ -1,63 +1,22 @@
-"""OpenINTEL top-list forward DNS — Tranco/Umbrella/CrUX/Majestic/Radar. Derives CAA, DNSSEC, DMARC, popularity columns on dabi-domains.
-
-TODO: implement fetch → transform → load.
-The skeleton below establishes the argparse contract, logging, checkpoint use,
-and exit code semantics so systemd timers can be wired immediately while the
-real logic is filled in.
-"""
+"""OpenINTEL forward-DNS top-lists — daily resolved records for ranked popular-domain lists."""
 
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, datetime, timedelta
 
-import structlog
-
-from dabi_ingest import checkpoint
+from dabi_ingest.pipelines import _fdns_common as fc
 
 PIPELINE = "openintel-toplist"
-DESCRIPTION = "OpenINTEL top-list forward DNS — Tranco/Umbrella/CrUX/Majestic/Radar. Derives CAA, DNSSEC, DMARC, popularity columns on dabi-domains."
+DESCRIPTION = (
+    "OpenINTEL forward-DNS top-lists — resolved records for alexa/crux/majestic/radar/tranco/umbrella."
+)
 
-log = structlog.get_logger(PIPELINE)
-
-
-def _default_partition_date() -> str:
-    """Default to yesterday (UTC); most OpenINTEL/CZDS publish previous-day data."""
-    return (datetime.now(UTC).date() - timedelta(days=1)).isoformat()
+DEFAULT_SOURCES = ["alexa", "crux", "majestic", "radar", "tranco", "umbrella"]
 
 
 def add_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument(
-        "--partition-date",
-        default=_default_partition_date(),
-        help="ISO date (YYYY-MM-DD) of the partition to ingest. Default: yesterday UTC.",
-    )
-    parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Ignore checkpoint and re-run even if already marked done.",
-    )
+    fc.add_fdns_args(parser, DEFAULT_SOURCES)
 
 
 def run(args: argparse.Namespace) -> int:
-    log_ = log.bind(partition_date=args.partition_date, force=args.force)
-
-    if not args.force and checkpoint.is_done(PIPELINE, args.partition_date):
-        log_.info("checkpoint.skip", reason="already done")
-        return 0
-
-    with checkpoint.run(PIPELINE, args.partition_date) as cp:
-        log_.info("step.fetch", todo=True)
-        # TODO: fetch source data into /scratch (Local SSD)
-
-        log_.info("step.transform", todo=True)
-        # TODO: DuckDB / Python transformation
-
-        log_.info("step.load", todo=True)
-        # TODO: bulk-load into OpenSearch (api host) or ClickHouse (analytics host)
-        rows_loaded = 0
-
-        cp.set_rows(rows_loaded)
-        log_.info("done", rows_loaded=rows_loaded)
-
-    return 0
+    return fc.run_fdns("toplist", DEFAULT_SOURCES, args)

@@ -27,13 +27,15 @@ PRODUCTION_TIMERS=(
   dabi-ingest-rir.timer
   dabi-ingest-rdns.timer
   dabi-ingest-openintel-cctld.timer
+  dabi-ingest-openintel-toplist.timer
+  dabi-ingest-openintel-zonefile.timer
 )
 PRODUCTION_SERVICES=()
 
 # Deferred (installed-but-NOT-enabled) — re-enable individually as gaps close:
 #   dabi-backup.timer            — needs OpenSearch snapshot repo 'dabi-backup' (Day-2)
-#   dabi-ingest-*.timer (11)     — dabi_ingest CLI subcommands not implemented yet
-#                                  (czds, archive, consolidate, openintel-*, rir)
+#   dabi-ingest-*.timer          — dabi_ingest CLI subcommands not implemented yet
+#                                  (archive, consolidate, openintel-ctlog/infra/prefix/rdns)
 #   dabi-zonestream.service      — same: 'zonestream' CLI subcommand missing
 
 echo "[*] Enabling production-ready timers..."
