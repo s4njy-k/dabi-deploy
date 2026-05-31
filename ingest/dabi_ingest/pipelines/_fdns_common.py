@@ -220,24 +220,25 @@ def build_delete_source_day_sql(source: str, date: str) -> str:
 from opensearchpy.helpers import parallel_bulk  # noqa: E402
 
 
-def build_enrich_doc(apex: str, rows: list[tuple[str, str]], snapshot_date: str) -> dict:
-    """Group (query_type, response) rows for one apex into the OS partial-update source."""
-    a, aaaa, ns, mx = [], [], [], []
-    has_dnssec = False
-    for qtype, resp in rows:
-        if qtype == "A":
-            a.append(resp)
-        elif qtype == "AAAA":
-            aaaa.append(resp)
-        elif qtype == "NS":
-            ns.append(resp)
-        elif qtype == "MX":
-            mx.append(resp)
-        elif qtype in ("DS", "DNSKEY"):
-            has_dnssec = True
-    # OpenINTEL measures the same record from multiple query-name variants (apex + www,
-    # multiple vantage points) → dedupe to clean, stable infra lists for investigators.
-    a, aaaa, ns, mx = sorted(set(a)), sorted(set(aaaa)), sorted(set(ns)), sorted(set(mx))
+def build_enrich_doc(
+    apex: str,
+    a_records: list[str],
+    aaaa_records: list[str],
+    nameservers: list[str],
+    mx_records: list[str],
+    has_dnssec: bool,
+    record_count: int,
+    snapshot_date: str,
+) -> dict:
+    """Assemble one apex's OS partial-update source from per-type value lists.
+
+    Lists are deduped+sorted (OpenINTEL repeats each record per query-name variant /
+    vantage point). ns_apex is the registered apex of the first nameserver.
+    """
+    a = sorted(set(a_records))
+    aaaa = sorted(set(aaaa_records))
+    ns = sorted(set(nameservers))
+    mx = sorted(set(mx_records))
     ns_apex = _registered_apex(ns[0]) if ns else ""
     return {
         "a_records": a,
@@ -245,8 +246,8 @@ def build_enrich_doc(apex: str, rows: list[tuple[str, str]], snapshot_date: str)
         "nameservers": ns,
         "mx_records": mx,
         "ns_apex": ns_apex,
-        "has_dnssec": has_dnssec,
-        "record_count": len(rows),
+        "has_dnssec": bool(has_dnssec),
+        "record_count": record_count,
         "snapshot_date": snapshot_date,
     }
 
@@ -257,36 +258,43 @@ def _registered_apex(host: str) -> str:
     return ".".join(labels[-2:]) if len(labels) >= 2 else host
 
 
-def enrich_opensearch(os_client, ch, date: str, log_, limit: int | None = None) -> int:
-    """Push the day's dns_current state into existing OS domain docs (partial updates).
+def enrich_opensearch(os_client, ch, date: str, basis: str, log_, limit: int | None = None) -> int:
+    """Push this run's resolved DNS into existing OS domain docs (partial updates).
 
-    Only apexes already present in OpenSearch are touched (no doc_as_upsert, so new domains
-    are not created here — name indexing is the cctld/czds pipelines' job).
+    Grouping is done IN ClickHouse (arrayDistinct(groupArrayIf(...))) so we stream one
+    row per apex (~10^7) instead of every record (~10^8) — keeps the step fast and the
+    ingest container's memory bounded. Only apexes already present in OpenSearch are
+    touched (no doc_as_upsert), so new domains are not created here.
     """
-    import itertools
-
     q = (
-        "SELECT apex, query_type, response FROM dabi.dns_records "
-        "WHERE observed_date = toDate({d:String}) "
+        "SELECT apex, "
+        "arrayDistinct(groupArrayIf(response, query_type = 'A'))    AS a, "
+        "arrayDistinct(groupArrayIf(response, query_type = 'AAAA')) AS aaaa, "
+        "arrayDistinct(groupArrayIf(response, query_type = 'NS'))   AS ns, "
+        "arrayDistinct(groupArrayIf(response, query_type = 'MX'))   AS mx, "
+        "max(query_type IN ('DS', 'DNSKEY'))                        AS has_dnssec, "
+        "count()                                                    AS rec "
+        "FROM dabi.dns_records "
+        "WHERE observed_date = toDate({d:String}) AND basis = {b:String} "
         "AND query_type IN ('A','AAAA','NS','MX','DS','DNSKEY') "
-        "ORDER BY apex"
+        "GROUP BY apex"
     )
     if limit:
         q += f" LIMIT {int(limit)}"
-    result = ch.query(q, parameters={"d": date})
 
     def _actions():
-        for apex, grp in itertools.groupby(result.result_rows, key=lambda r: r[0]):
-            rows = [(r[1], r[2]) for r in grp]
-            # Route to the per-TLD alias (single-index, writable). The global
-            # `dabi-domains` alias spans many indices and cannot be an update target.
-            tld = apex.rsplit(".", 1)[-1]
-            yield {
-                "_op_type": "update",
-                "_index": f"domains-{tld}",
-                "_id": apex,
-                "doc": build_enrich_doc(apex, rows, date),
-            }
+        with ch.query_row_block_stream(q, parameters={"d": date, "b": basis}) as stream:
+            for block in stream:
+                for apex, a, aaaa, ns, mx, has_dnssec, rec in block:
+                    # Route to the per-TLD alias (single-index, writable). The global
+                    # `dabi-domains` alias spans many indices and cannot be an update target.
+                    tld = apex.rsplit(".", 1)[-1]
+                    yield {
+                        "_op_type": "update",
+                        "_index": f"domains-{tld}",
+                        "_id": apex,
+                        "doc": build_enrich_doc(apex, a, aaaa, ns, mx, has_dnssec, rec, date),
+                    }
 
     updated = 0
     for ok, _info in parallel_bulk(
@@ -402,6 +410,6 @@ def run_fdns(basis: str, default_sources: list[str], args: argparse.Namespace) -
 
         if not args.skip_opensearch:
             os_client = clients.opensearch()
-            enrich_opensearch(os_client, ch, date, log_, limit=args.enrich_limit)
+            enrich_opensearch(os_client, ch, date, basis, log_, limit=args.enrich_limit)
 
     return 0

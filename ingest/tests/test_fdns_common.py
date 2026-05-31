@@ -90,20 +90,20 @@ def test_build_current_upsert_sql_uses_date_and_min_first_seen():
     assert "GROUP BY apex, query_type, response" in sql
 
 
-def test_enrich_doc_groups_records_into_os_fields():
-    rows = [
-        ("A", "64.190.63.222"),
-        ("A", "64.190.63.223"),
-        ("AAAA", "2001:db8::1"),
-        ("NS", "ns1.sedoparking.com"),
-        ("NS", "ns2.sedoparking.com"),
-        ("MX", "mail.example.li"),
-        ("DNSKEY", "8"),
-    ]
-    doc = fc.build_enrich_doc("coinstrader24.li", rows, "2026-05-29")
-    assert sorted(doc["a_records"]) == ["64.190.63.222", "64.190.63.223"]
+def test_enrich_doc_dedupes_and_derives_ns_apex():
+    doc = fc.build_enrich_doc(
+        "coinstrader24.li",
+        a_records=["64.190.63.222", "64.190.63.222", "64.190.63.223"],  # dup
+        aaaa_records=["2001:db8::1"],
+        nameservers=["ns1.sedoparking.com", "ns2.sedoparking.com", "ns1.sedoparking.com"],
+        mx_records=["mail.example.li"],
+        has_dnssec=1,  # CH returns UInt8
+        record_count=7,
+        snapshot_date="2026-05-29",
+    )
+    assert doc["a_records"] == ["64.190.63.222", "64.190.63.223"]  # deduped+sorted
     assert doc["aaaa_records"] == ["2001:db8::1"]
-    assert sorted(doc["nameservers"]) == ["ns1.sedoparking.com", "ns2.sedoparking.com"]
+    assert doc["nameservers"] == ["ns1.sedoparking.com", "ns2.sedoparking.com"]
     assert doc["ns_apex"] == "sedoparking.com"
     assert doc["has_dnssec"] is True
     assert doc["mx_records"] == ["mail.example.li"]
@@ -112,7 +112,7 @@ def test_enrich_doc_groups_records_into_os_fields():
 
 
 def test_enrich_doc_no_dnssec_when_absent():
-    doc = fc.build_enrich_doc("x.li", [("A", "1.2.3.4")], "2026-05-29")
+    doc = fc.build_enrich_doc("x.li", ["1.2.3.4"], [], [], [], 0, 1, "2026-05-29")
     assert doc["has_dnssec"] is False
     assert doc["nameservers"] == []
     assert doc["ns_apex"] == ""
